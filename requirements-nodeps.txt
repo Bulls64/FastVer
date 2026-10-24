@@ -1,0 +1,5 @@
+# À installer avec « pip install --no-deps -r requirements-nodeps.txt » : QFluentWidgets réclame le paquet
+# PySide6 complet (WebEngine, Pdf, Addons…, plusieurs centaines de Mo) alors qu'il n'utilise que PySide6-Essentials.
+# Install with “pip install --no-deps -r requirements-nodeps.txt”: QFluentWidgets asks for the full PySide6
+# package (WebEngine, Pdf, Addons…, several hundred MB) although it only uses PySide6-Essentials.
+PySide6-Fluent-Widgets==1.11.3

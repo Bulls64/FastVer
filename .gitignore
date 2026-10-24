@@ -1,0 +1,7 @@
+build/
+dist/
+release/
+version_info.txt
+__pycache__/
+*.bak.py
+*.bak.exe

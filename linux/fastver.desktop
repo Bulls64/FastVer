@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=FastVer
+GenericName=About this system
+GenericName[fr]=À propos du système
+Comment=An “About” window for Fastfetch, in the Windows 11 Winver style
+Comment[fr]=Une fenêtre « À propos » pour Fastfetch, dans le style de Winver (Windows 11)
+Exec=FastVer
+Icon=fastver
+Terminal=false
+Categories=System;Utility;
+Keywords=fastfetch;neofetch;system;information;about;winver;
+StartupWMClass=FastVer
