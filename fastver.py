@@ -106,7 +106,7 @@ if os.name == "nt":
 # no import may happen later, inside a function called once Qt is loaded.
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.2.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.2.1"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
 BUILD = "2026-10-25-l"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
