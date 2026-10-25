@@ -4,6 +4,12 @@ Une fenêtre « À propos » pour [Fastfetch](https://github.com/fastfetch-cli/f
 
 *An “About” window for Fastfetch, inspired by Windows 11's Winver, built with PySide6 + QFluentWidgets.*
 
+<p align="center">
+  <img src="docs/screenshots/main.png" width="400" alt="Fenêtre principale de FastVer, thème clair">
+  <img src="docs/screenshots/dark.png" width="400" alt="FastVer en thème sombre, spécifications de l'appareil dépliées">
+</p>
+<p align="center"><sub>Thème clair et thème sombre avec les spécifications dépliées (mode démo : <code>--demo</code>).</sub></p>
+
 ## Installation
 
 - **Windows :** téléchargez `FastVer.exe` depuis la [dernière version](../../releases/latest). Fastfetch doit être installé (`winget install Fastfetch-cli.Fastfetch`).
@@ -13,6 +19,10 @@ Une fenêtre « À propos » pour [Fastfetch](https://github.com/fastfetch-cli/f
 L'exe n'est pas signé : au premier lancement, SmartScreen demande une confirmation (« Informations complémentaires » → « Exécuter quand même »).
 
 ## Mises à jour
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" width="400" alt="Page Réglages de FastVer : langue, mise à jour de Fastfetch et de FastVer">
+</p>
 
 FastVer peut se mettre à jour lui-même depuis les releases de ce dépôt (Réglages → Application FastVer). Chaque fichier est vérifié avant d'être installé : son empreinte SHA-256 doit correspondre à celle publiée dans le fichier `.sha256` qui l'accompagne et à celle que GitHub calcule pour l'asset. Sans empreinte, ou si elles se contredisent, la mise à jour est refusée.
 
