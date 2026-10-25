@@ -10,6 +10,11 @@ Une fenêtre « À propos » pour [Fastfetch](https://github.com/fastfetch-cli/f
 </p>
 <p align="center"><sub>Thème clair et thème sombre avec les spécifications dépliées (mode démo : <code>--demo</code>).</sub></p>
 
+<p align="center">
+  <img src="docs/screenshots/ubuntu.png" width="800" alt="FastVer lancé depuis un terminal sur Ubuntu 24.04 LTS">
+</p>
+<p align="center"><sub>FastVer sous Ubuntu 24.04 LTS (AppImage, Fastfetch 2.70.0). Capture réelle de la fenêtre ; le décor du bureau est une illustration.</sub></p>
+
 ## Installation
 
 - **Windows :** téléchargez `FastVer.exe` depuis la [dernière version](../../releases/latest). Fastfetch doit être installé (`winget install Fastfetch-cli.Fastfetch`).
