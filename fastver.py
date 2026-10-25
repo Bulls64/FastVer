@@ -108,7 +108,7 @@ if os.name == "nt":
 APP_NAME = "FastVer"
 APP_VERSION = "1.2.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-10-24-k"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-10-25-l"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 UPDATE_REPO = "Bulls64/FastVer"   # dépôt GitHub où publier les nouvelles versions (assets « fastver.py »,
                                   # « FastVer.exe » et leurs empreintes « .sha256 »)
@@ -790,6 +790,75 @@ def parse_rows(txt):
     return title, rows
 
 
+def own_pids():
+    """PID de FastVer : le processus Python et, dans l'exe ou l'AppImage, le lanceur PyInstaller qui l'a créé.
+    FastVer's PIDs: the Python process and, in the exe or the AppImage, the PyInstaller launcher that started it."""
+    pids = {os.getpid()}
+    if FROZEN:
+        try:
+            pids.add(os.getppid())
+        except (AttributeError, OSError):
+            pass
+    return pids
+
+
+def login_shell():
+    """Shell de connexion de l'utilisateur (Linux, macOS) avec sa version, ex. « bash 5.2.21 », ou None.
+    The user's login shell (Linux, macOS) with its version, e.g. “bash 5.2.21”, or None."""
+    if os.name == "nt":
+        return None
+    path = os.environ.get("SHELL") or ""
+    if not path:
+        try:
+            import pwd
+            path = pwd.getpwuid(os.getuid()).pw_shell
+        except (ImportError, KeyError, OSError):
+            return None
+    name = os.path.basename(path)
+    if not name or name in ("nologin", "false"):
+        return None
+    try:
+        out = subprocess.run([path, "--version"], stdin=subprocess.DEVNULL, capture_output=True,
+                             timeout=3).stdout.decode("utf-8", "replace")
+        m = re.search(r"\d+(?:\.\d+)+", out)
+    except (OSError, subprocess.SubprocessError):
+        m = None
+    return f"{name} {m.group(0)}" if m else name
+
+
+def fix_self_detection(d):
+    """Fastfetch prend pour shell (ou pour terminal) le premier processus parent qu'il trouve : lancé par FastVer,
+    c'est FastVer lui-même (« FastVer », « python3 »…). Ces lignes sont corrigées : le shell devient le shell de
+    connexion de l'utilisateur (Linux, macOS), sinon la ligne est retirée ; le terminal est retiré.
+    Fastfetch takes the first parent process it finds for the shell (or the terminal): launched by FastVer, that is
+    FastVer itself (“FastVer”, “python3”…). These rows are fixed: the shell becomes the user's login shell
+    (Linux, macOS), otherwise the row is removed; the terminal is removed."""
+    mine = own_pids()
+    names = {os.path.basename(p).lower() for p in (sys.executable, APP_PATH or "", APPIMAGE or "") if p}
+
+    def is_self(mod):
+        r = d.modules.get(mod)
+        if not isinstance(r, dict):
+            return False
+        if r.get("pid") in mine:
+            return True
+        exe = os.path.basename(str(r.get("exePath") or r.get("exe") or "")).lower()
+        return bool(exe) and exe in names
+
+    rows = []
+    for k, v in d.rows:
+        if k == "Shell" and is_self("shell"):
+            sh = login_shell()
+            if not sh:
+                continue
+            v = sh
+            d.modules["shell"] = dict(d.modules["shell"], prettyName=sh, pid=None)
+        elif k == "Terminal" and is_self("terminal"):
+            continue
+        rows.append((k, v))
+    d.rows = rows
+
+
 def load_fastfetch(exe):
     d = FFData()
     with ThreadPoolExecutor(4) as ex:
@@ -832,6 +901,7 @@ def load_fastfetch(exe):
 
     if not d.rows and not d.modules:
         raise RuntimeError(tr("ff_no_data") + "\n" + "\n".join(d.errors))
+    fix_self_detection(d)
     if not d.title:
         t = d.modules.get("title") or {}
         if t.get("userName") and t.get("hostName"):
