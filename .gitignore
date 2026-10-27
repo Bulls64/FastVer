@@ -5,3 +5,4 @@ version_info.txt
 __pycache__/
 *.bak.py
 *.bak.exe
+version_info_cli.txt

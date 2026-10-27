@@ -22,6 +22,8 @@ Utilisation :
     python fastver.py --expand         ouvre directement les spécifications
     python fastver.py --fastfetch C:\\outils\\fastfetch.exe
     python fastver.py --lang en        langue pour cette session : auto | fr | en
+    python fastver.py --cli            version en ligne de commande, sans fenêtre ni Qt
+                                       (aide : --cli --help ; sous Windows : FastVer-cli.exe)
 
 Réglages (roue dentée, en bas de la fenêtre) : langue, vérification et mise à jour de
 Fastfetch et de FastVer, manuellement ou automatiquement au démarrage. Ils sont enregistrés
@@ -54,6 +56,8 @@ Usage:
     python fastver.py --expand         opens the specifications right away
     python fastver.py --fastfetch C:\\tools\\fastfetch.exe
     python fastver.py --lang en        language for this session: auto | fr | en
+    python fastver.py --cli            command-line version, without a window or Qt
+                                       (help: --cli --help; on Windows: FastVer-cli.exe)
 
 Settings (gear button, at the bottom of the window): language, checking and updating
 Fastfetch and FastVer, manually or automatically at startup. They are saved
@@ -106,9 +110,9 @@ if os.name == "nt":
 # no import may happen later, inside a function called once Qt is loaded.
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.2.1"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.3.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-10-25-l"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-10-27-m"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 UPDATE_REPO = "Bulls64/FastVer"   # dépôt GitHub où publier les nouvelles versions (assets « fastver.py »,
                                   # « FastVer.exe » et leurs empreintes « .sha256 »)
@@ -130,10 +134,13 @@ APPIMAGE = os.environ.get("APPIMAGE") if FROZEN and sys.platform.startswith("lin
 # Form of the running FastVer: “exe” (Windows), “appimage” (Linux), “script” (fastver.py),
 # or “frozen” (compiled but not packaged: updates through the release page only).
 PACKAGE = ("exe" if os.name == "nt" else "appimage" if APPIMAGE else "frozen") if FROZEN else "script"
+if PACKAGE == "exe" and "cli" in os.path.basename(sys.executable).lower():
+    PACKAGE = "exe-cli"   # FastVer-cli.exe : version console, sans Qt / console version, without Qt
 # Fichier à télécharger lors d'une mise à jour, et nom de la copie gardée de l'ancienne version.
 # File to download when updating, and name of the copy kept of the old version.
 APP_ASSET, BACKUP_NAME = {
     "exe": ("FastVer.exe", "FastVer-{v}.bak.exe"),
+    "exe-cli": ("FastVer-cli.exe", "FastVer-cli-{v}.bak.exe"),
     "appimage": (f"FastVer-{platform.machine()}.AppImage", "FastVer-{v}.bak.AppImage"),
     "script": ("fastver.py", "fastver-{v}.bak.py"),
 }.get(PACKAGE, (None, None))
@@ -357,6 +364,32 @@ STRINGS = {
         "cli_wallpaper": "image à flouter pour l'acrylique (défaut : fond d'écran)",
         "cli_fastfetch": "chemin vers l'exécutable fastfetch",
         "cli_lang": "langue de l'interface pour cette session : auto, fr ou en",
+        "cli_cli": "version en ligne de commande : affiche FastVer dans le terminal, sans fenêtre "
+                   "(voir fastver --cli --help)",
+        # Version en ligne de commande (--cli)
+        # Command-line version (--cli)
+        "cli_desc_cli": "FastVer en ligne de commande : la fiche « À propos » de Fastfetch dans le terminal, "
+                        "et la mise à jour de Fastfetch et de FastVer.",
+        "cli_specs": "afficher aussi les spécifications de l'appareil",
+        "cli_json": "sortie JSON, pour les scripts",
+        "cli_no_color": "sans couleurs ni liens (aussi : variable NO_COLOR, ou sortie redirigée)",
+        "cli_no_logo": "sans le logo",
+        "cli_check": "rechercher les mises à jour de Fastfetch et de FastVer",
+        "cli_update": "installer les mises à jour : fastfetch, fastver ou all (les deux)",
+        "cli_backups": "lister les anciennes versions de FastVer gardées après les mises à jour",
+        "cli_delete_backups": "supprimer ces anciennes versions (après confirmation)",
+        "cli_yes": "répondre oui aux confirmations",
+        "cli_epilog": "Sans --cli, FastVer ouvre sa fenêtre. FastVer-cli.exe (Windows) et un lien nommé "
+                      "« fastver-cli » démarrent directement dans ce mode.",
+        "cli_specs_count": "{n} éléments",
+        "cli_page": "Page : {url}",
+        "cli_updating": "Mise à jour de {what}…",
+        "cli_no_backups": "Aucune ancienne version gardée.",
+        "cli_confirm_delete": "Supprimer ces {n} fichiers ? [o/N] ",
+        "cli_confirm_delete_1": "Supprimer ce fichier ? [o/N] ",
+        "cli_yes_words": ("o", "oui", "y", "yes"),
+        "cli_cancelled": "Annulé.",
+        "cli_no_backups_here": "Les anciennes versions ne sont gardées que pour fastver.py, l'exe et l'AppImage.",
     },
     "en": {
         "about_fastfetch": "About Fastfetch",
@@ -482,6 +515,30 @@ STRINGS = {
         "cli_wallpaper": "image to blur for the acrylic (default: desktop wallpaper)",
         "cli_fastfetch": "path to the fastfetch executable",
         "cli_lang": "interface language for this session: auto, fr or en",
+        "cli_cli": "command-line version: shows FastVer in the terminal, without a window "
+                   "(see fastver --cli --help)",
+        "cli_desc_cli": "FastVer on the command line: Fastfetch's “About” card in the terminal, "
+                        "and updating Fastfetch and FastVer.",
+        "cli_specs": "also show the device specifications",
+        "cli_json": "JSON output, for scripts",
+        "cli_no_color": "no colors or links (also: NO_COLOR variable, or redirected output)",
+        "cli_no_logo": "without the logo",
+        "cli_check": "check for Fastfetch and FastVer updates",
+        "cli_update": "install updates: fastfetch, fastver or all (both)",
+        "cli_backups": "list the old FastVer versions kept after updates",
+        "cli_delete_backups": "delete those old versions (after confirmation)",
+        "cli_yes": "answer yes to confirmations",
+        "cli_epilog": "Without --cli, FastVer opens its window. FastVer-cli.exe (Windows) and a link named "
+                      "“fastver-cli” start directly in this mode.",
+        "cli_specs_count": "{n} items",
+        "cli_page": "Page: {url}",
+        "cli_updating": "Updating {what}…",
+        "cli_no_backups": "No old version kept.",
+        "cli_confirm_delete": "Delete these {n} files? [y/N] ",
+        "cli_confirm_delete_1": "Delete this file? [y/N] ",
+        "cli_yes_words": ("y", "yes"),
+        "cli_cancelled": "Cancelled.",
+        "cli_no_backups_here": "Old versions are only kept for fastver.py, the exe and the AppImage.",
     },
 }
 LANG = "fr"
@@ -1345,9 +1402,9 @@ def _looks_genuine(data):
     produit dans ses infos de version (UTF-16) ; une AppImage est un exécutable ELF marqué « AI\\x02 ».
     Shape check on top of the checksum: a genuine FastVer.exe starts with “MZ” and carries the product name in
     its version info (UTF-16); an AppImage is an ELF executable marked “AI\\x02”."""
-    if len(data) < 5 * 1024 * 1024:
-        return False
-    if PACKAGE == "exe":
+    if len(data) < (2 if PACKAGE == "exe-cli" else 5) * 1024 * 1024:   # la version console est plus légère
+        return False                                                     # the console version is lighter
+    if PACKAGE in ("exe", "exe-cli"):
         return data[:2] == b"MZ" and "FastVer".encode("utf-16-le") in data
     return data[:4] == b"\x7fELF" and data[8:11] == b"AI\x02"
 
@@ -1402,7 +1459,7 @@ def _silent_remove(path):
 def app_install(url, sha256):
     """Télécharge la nouvelle version, vérifie son empreinte, garde une copie de l'actuelle puis la remplace.
     Downloads the new version, checks its checksum, keeps a copy of the current one, then replaces it."""
-    if PACKAGE in ("exe", "appimage"):
+    if PACKAGE in ("exe", "exe-cli", "appimage"):
         return app_install_binary(url, sha256)
     if PACKAGE != "script":
         raise UpdateError(tr("no_command"))
@@ -1761,6 +1818,391 @@ _fix_streams()
 if __name__ == "__main__" and not FROZEN and len(sys.argv) > 1 and sys.argv[1] == REPAIR_FLAG:
     run_repair(sys.argv[2:])  # ne revient jamais
                               # never returns
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Version en ligne de commande (--cli) : n'utilise ni Qt ni QFluentWidgets
+#  Command-line version (--cli): uses neither Qt nor QFluentWidgets
+# ════════════════════════════════════════════════════════════════════════════
+
+def cli_requested(argv):
+    """Vrai pour « fastver --cli … », FastVer-cli.exe ou un lien nommé « fastver-cli ».
+    True for “fastver --cli …”, FastVer-cli.exe or a link named “fastver-cli”."""
+    if "--cli" in argv[1:] or PACKAGE == "exe-cli":
+        return True
+    name = os.environ.get("ARGV0") if APPIMAGE else argv[0]   # nom sous lequel l'AppImage a été lancée
+    name = os.path.basename(name or "").lower()               # name the AppImage was launched under
+    return name.startswith("fastver") and "cli" in name
+
+
+def parse_cli_args(argv):
+    p = argparse.ArgumentParser(prog="fastver --cli", description=tr("cli_desc_cli"), epilog=tr("cli_epilog"))
+    p.add_argument("--cli", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("-s", "--specs", action="store_true", help=tr("cli_specs"))
+    p.add_argument("--json", action="store_true", help=tr("cli_json"))
+    p.add_argument("--no-color", action="store_true", help=tr("cli_no_color"))
+    p.add_argument("--no-logo", action="store_true", help=tr("cli_no_logo"))
+    p.add_argument("--check", action="store_true", help=tr("cli_check"))
+    p.add_argument("--update", choices=("fastfetch", "fastver", "all"), help=tr("cli_update"))
+    p.add_argument("--backups", action="store_true", help=tr("cli_backups"))
+    p.add_argument("--delete-backups", action="store_true", help=tr("cli_delete_backups"))
+    p.add_argument("-y", "--yes", action="store_true", help=tr("cli_yes"))
+    p.add_argument("--demo", action="store_true", help=tr("cli_demo"))
+    p.add_argument("--fastfetch", metavar="PATH", help=tr("cli_fastfetch"))
+    p.add_argument("--lang", choices=("auto", "fr", "en"), default=None, help=tr("cli_lang"))
+    p.add_argument("--version", action="version", version=f"FastVer {APP_VERSION} (build {BUILD})")
+    return p.parse_args(argv)
+
+
+def attach_parent_console():
+    """FastVer.exe n'a pas de console : « FastVer.exe --cli » écrit alors dans celle de l'invite qui l'a lancé.
+    FastVer.exe has no console: “FastVer.exe --cli” then writes to the console of the prompt that started it."""
+    if os.name != "nt" or PACKAGE != "exe":
+        return
+    try:
+        if ctypes.windll.kernel32.AttachConsole(-1):   # ATTACH_PARENT_PROCESS
+            sys.stdout = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+            sys.stderr = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+            sys.stdin = open("CONIN$", "r", encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+def enable_vt():
+    """Active les séquences ANSI dans la console Windows. Vrai si elles sont utilisables.
+    Turns on ANSI sequences in the Windows console. True if they can be used."""
+    if os.name != "nt":
+        return True
+    try:
+        k = ctypes.windll.kernel32
+        h = k.GetStdHandle(-11)   # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if not k.GetConsoleMode(h, ctypes.byref(mode)):
+            return False
+        return bool(k.SetConsoleMode(h, mode.value | 0x0004))   # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        return False
+
+
+class Painter:
+    """Mise en couleur pour le terminal : couleurs 24 bits si le terminal les annonce, sinon 256 couleurs.
+    Terminal coloring: 24-bit colors if the terminal announces them, otherwise 256 colors."""
+
+    def __init__(self, enabled):
+        self.on = enabled
+        ct = os.environ.get("COLORTERM", "").lower()
+        self.truecolor = "truecolor" in ct or "24bit" in ct or bool(os.environ.get("WT_SESSION")) \
+            or os.environ.get("TERM_PROGRAM") in ("vscode", "iTerm.app", "WezTerm")
+
+    @staticmethod
+    def _xterm(r, g, b):
+        def cube(v):
+            return 0 if v < 48 else 1 if v < 115 else (v - 35) // 40
+        ci = 16 + 36 * cube(r) + 6 * cube(g) + cube(b)
+        cr, cg, cb = [(0, 95, 135, 175, 215, 255)[cube(v)] for v in (r, g, b)]
+        gray = round(((r + g + b) / 3 - 8) / 10)
+        gi, gv = 232 + max(0, min(23, gray)), 8 + 10 * max(0, min(23, gray))
+        dc = (cr - r) ** 2 + (cg - g) ** 2 + (cb - b) ** 2
+        dg = (gv - r) ** 2 + (gv - g) ** 2 + (gv - b) ** 2
+        return gi if dg < dc else ci
+
+    def __call__(self, text, color=None, bold=False, dim=False, link=None):
+        if not self.on or not text or (not text.strip() and not link):
+            return text
+        codes = []
+        if bold:
+            codes.append("1")
+        if dim:
+            codes.append("2")
+        if color:
+            r, g, b = hex2rgb(color)
+            codes.append(f"38;2;{r};{g};{b}" if self.truecolor else f"38;5;{self._xterm(r, g, b)}")
+        out = f"\x1b[{';'.join(codes)}m{text}\x1b[0m" if codes else text
+        if link:
+            out = f"\x1b]8;;{link}\x1b\\{out}\x1b]8;;\x1b\\"   # lien cliquable (OSC 8) / clickable link
+        return out
+
+
+def cli_width():
+    return max(40, min(shutil.get_terminal_size((100, 24)).columns, 120))
+
+
+def wrap_plain(text, width, indent=""):
+    import textwrap
+    return textwrap.wrap(text, width=max(10, width), subsequent_indent=indent,
+                         break_long_words=True, break_on_hyphens=False) or [""]
+
+
+def card_lines(d, inf, paint, accent, width):
+    """Lignes de la fiche « À propos » : (texte affiché, longueur visible).
+    Lines of the “About” card: (displayed text, visible length)."""
+    out = []
+
+    def add(plain, styled=None):
+        out.append((styled if styled is not None else plain, len(plain)))
+
+    def para(text, **style):
+        for ln in wrap_plain(text, width):
+            add(ln, paint(ln, **style))
+
+    head = f"{inf['first']} {inf['rest']}".strip()
+    if len(head) <= width:
+        add(head, paint(inf["first"], accent, bold=True) + (" " + paint(inf["rest"], accent) if inf["rest"] else ""))
+    else:
+        para(head, color=accent, bold=True)
+    tags = list(inf["tags"]) + ([f"Fastfetch {d.version}"] if d.version else []) + \
+        ([tr("demo_tag")] if d.demo else [])
+    if tags:
+        para(" · ".join(tags), dim=True)
+    add("")
+    para(inf["full"], bold=True)
+    para(inf["line2"])
+    para(tr("copyright", year=d.when.year, owner=inf["owner"]))
+    add("")
+    link_text = tr("license_link")
+    lic = tr("license", link="\x00")
+    plain = lic.replace("\x00", link_text)
+    if len(plain) <= width:
+        add(plain, lic.replace("\x00", paint(link_text, accent, link=LICENSE_URL)))
+    else:
+        para(plain)
+    for ln in wrap_plain(inf["owner"], width - 4):
+        add("    " + ln, "    " + paint(ln, bold=True))
+    if inf["host"]:
+        add("    " + inf["host"], "    " + paint(inf["host"], dim=True))
+    return out
+
+
+def print_card(d, args, paint, accent):
+    inf = os_info(d)
+    width = cli_width()
+    logo = [] if args.no_logo else [("".join(paint(t, fg, bold=b) for t, fg, b in line),
+                                     sum(len(t) for t, _, _ in line)) for line in d.logo]
+    logo_w = max((n for _, n in logo), default=0)
+    side = bool(logo) and width - logo_w - 4 >= 44   # logo à gauche si la place le permet
+    text = card_lines(d, inf, paint, accent, (width - logo_w - 4) if side else width - 2)
+    print()
+    if side:
+        pad_top = max(0, (len(logo) - len(text)) // 2) if len(logo) > len(text) + 2 else 0
+        text = [("", 0)] * pad_top + text
+        for i in range(max(len(logo), len(text))):
+            ls, ln = logo[i] if i < len(logo) else ("", 0)
+            ts, _ = text[i] if i < len(text) else ("", 0)
+            print("  " + ls + " " * (logo_w - ln) + "   " + ts if ts else "  " + ls)
+    else:
+        for ls, _ in logo:
+            print("  " + ls)
+        if logo:
+            print()
+        for ts, _ in text:
+            print("  " + ts)
+    print()
+    return inf
+
+
+def print_specs(d, inf, paint, accent):
+    rows = spec_rows(d, inf)
+    width = cli_width()
+    title = tr("specs_title")
+    print("  " + paint(title, accent, bold=True) + "  " + paint(tr("cli_specs_count", n=len(rows)), dim=True))
+    key_w = min(max((len(k) for k, *_ in rows), default=10), 26)
+    val_w = max(20, width - 2 - key_w - 3 - 2)
+    for key, _raw, val, pct in rows:
+        keys = wrap_plain(key, key_w)
+        vals = wrap_plain(val, val_w)
+        if pct is not None:
+            bar_w = 12
+            n = round(pct / 100 * bar_w)
+            if paint.on:
+                bar = paint("━" * n, accent) + paint("━" * (bar_w - n), dim=True)
+            else:   # sans couleurs, la jauge se lit à la forme des caractères / without colors, read by shape
+                bar = "█" * n + "░" * (bar_w - n)
+            if len(vals[-1]) + 2 + bar_w <= val_w:
+                vals[-1] = vals[-1] + "\x00" + bar
+            else:
+                vals.append("\x00" + bar)
+        for i in range(max(len(keys), len(vals))):
+            k = keys[i] if i < len(keys) else ""
+            v = vals[i] if i < len(vals) else ""
+            v = v.replace("\x00", "  ") if "\x00" in v else v
+            print("  " + paint(k.ljust(key_w), dim=True) + "   " + v)
+    print()
+
+
+def update_state(kind, res):
+    latest = res.get("latest")
+    local = res.get("local") if kind == "fastfetch" else APP_VERSION
+    if kind == "fastfetch" and not local:
+        return "missing"
+    if latest is None:
+        return "norelease"
+    if is_newer(latest, local):
+        return "available"
+    return "dev" if is_newer(local, latest) else "uptodate"
+
+
+def update_text(kind, st, u):
+    key = {"updated": "st_updated_restart" if kind == "app" else "st_updated"}.get(st, f"st_{st}")
+    if st == "available" and u.get("action") == "hint":
+        key = "st_hint"
+    elif st == "available" and u.get("action") == "page":
+        key = "st_no_checksum" if kind == "app" and u.get("no_checksum") else \
+            ("st_page" if kind == "fastfetch" else "st_page_app")
+    return tr(key, latest=u.get("latest") or "", repo=UPDATE_REPO, msg=u.get("msg", ""), cmd=u.get("hint"))
+
+
+def cli_updates(args, paint, accent):
+    """--check et --update : même logique que la page Réglages de la fenêtre.
+    --check and --update: same logic as the window's Settings page."""
+    kinds = ["fastfetch", "app"]
+    if args.update == "fastfetch":
+        kinds = ["fastfetch"]
+    elif args.update == "fastver":
+        kinds = ["app"]
+    results, code = {}, 0
+    exe = find_fastfetch(args.fastfetch)
+    for kind in kinds:
+        what = "Fastfetch" if kind == "fastfetch" else APP_NAME
+        u = {}
+        try:
+            u.update(ff_check(exe) if kind == "fastfetch" else app_check())
+            st = update_state(kind, u)
+        except Exception as e:
+            st, code = "error", 1
+            u["msg"] = str(e) or e.__class__.__name__
+        if args.update and st in ("available", "missing") and u.get("action") == "update":
+            if not args.json:
+                print("  " + paint(tr("cli_updating", what=what), dim=True), flush=True)
+            try:
+                if kind == "fastfetch":
+                    local = ff_update(exe, u.get("method"), u.get("latest"))
+                    u.update(local=local or u.get("latest"), latest=local or u.get("latest"))
+                else:
+                    u["latest"] = app_install(u.get("url"), u.get("sha256")) or u.get("latest")
+                st = "updated"
+            except Exception as e:
+                st, code = "error", 1
+                u["msg"] = str(e) or e.__class__.__name__
+        if kind == "fastfetch":
+            if exe and not u.get("local"):
+                try:
+                    u["local"] = ff_local_version(exe)   # GitHub injoignable : la version locale reste utile
+                except Exception:                        # GitHub unreachable: the local version is still useful
+                    pass
+            local = u.get("local") or ""
+            title = (f"Fastfetch {local}".strip() + (" · " + tr(f"method_{u['method']}") if u.get("method") else "")) \
+                if exe else tr("ff_not_installed")
+        else:
+            title = f"{APP_NAME} {APP_VERSION}"
+        text = update_text(kind, st, u)
+        results["fastfetch" if kind == "fastfetch" else "fastver"] = dict(
+            state=st, installed=(u.get("local") or None) if kind == "fastfetch" else APP_VERSION,
+            latest=u.get("latest"), action=u.get("action") if st in ("available", "missing") else None,
+            url=u.get("url") if u.get("action") == "page" else None,
+            message=text)
+        if not args.json:
+            color = {"available": accent, "error": "#E74856", "updated": "#16C60C", "uptodate": None}.get(st)
+            print("  " + paint(title, bold=True))
+            print("  " + paint(text, color))
+            if st == "available" and u.get("action") == "page" and u.get("url"):
+                print("  " + paint(tr("cli_page", url=u["url"]), dim=True, link=u["url"]))
+            print()
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    return code
+
+
+def cli_backups(args, paint):
+    if not BACKUP_NAME:
+        print("  " + tr("cli_no_backups_here"))
+        return 0
+    found = list_backups()
+    if not found:
+        print("  " + tr("cli_no_backups"))
+        return 0
+    total = sum(os.path.getsize(p) for p in found)
+    print("  " + paint(tr("backups_title"), bold=True) + "  " + paint(fmt_bytes(total), dim=True))
+    for p in found:
+        print("  " + p + "  " + paint(fmt_bytes(os.path.getsize(p)), dim=True))
+    if not args.delete_backups:
+        return 0
+    if not args.yes:
+        ask = tr("cli_confirm_delete_1") if len(found) == 1 else tr("cli_confirm_delete", n=len(found))
+        try:
+            answer = input("  " + ask).strip().lower()
+        except EOFError:
+            answer = ""
+            print()
+        if answer not in tr("cli_yes_words"):
+            print("  " + tr("cli_cancelled"))
+            return 1
+    n = delete_backups(found)
+    print("  " + tr("backups_deleted_1" if n == 1 else "backups_deleted", n=n))
+    return 0 if n == len(found) else 1
+
+
+def cli_json(d, args):
+    inf = os_info(d)
+    print(json.dumps(dict(
+        fastver=APP_VERSION, fastfetch=d.version or None, demo=d.demo,
+        os=dict(name=inf["pretty"], family=inf["full"], version=inf["line2"], owner=inf["owner"],
+                user=inf["user"], host=inf["host"], tags=inf["tags"]),
+        specs=[dict(key=k, id=raw or None, value=v, percent=pct) for k, raw, v, pct in spec_rows(d, inf)],
+    ), ensure_ascii=False, indent=2))
+
+
+def cli_main(argv):
+    attach_parent_console()
+    args = parse_cli_args(argv)
+    if args.lang:
+        set_language(args.lang)
+    color = not args.no_color and not args.json and not os.environ.get("NO_COLOR") \
+        and sys.stdout.isatty() and enable_vt()
+    paint = Painter(color)
+    write_log(f"FastVer {APP_VERSION} build {BUILD} (CLI) — {APP_PATH} — Python {platform.python_version()}")
+
+    if args.backups or args.delete_backups:
+        return cli_backups(args, paint)
+    if args.check or args.update:
+        return cli_updates(args, paint, "#3A96DD")
+
+    if args.demo:
+        d = demo_data()
+    else:
+        exe = find_fastfetch(args.fastfetch)
+        if not exe:
+            print(tr("ff_missing_title") + "\n" + tr("ff_missing_msg"), file=sys.stderr)
+            return 1
+        try:
+            d = load_fastfetch(exe)
+        except Exception as e:
+            print(tr("ff_failed_title") + "\n" + str(e), file=sys.stderr)
+            return 1
+    if args.json:
+        cli_json(d, args)
+        return 0
+    accent = tame_accent(logo_accent(d) or "#0067C0")
+    # L'accent est éclairci pour rester lisible sur un terminal sombre comme clair.
+    # The accent is lightened to stay readable on a dark terminal as well as a light one.
+    h, l, s_ = to_hls(accent)
+    accent = from_hls(h, 0.6, max(s_, 0.6))
+    inf = print_card(d, args, paint, accent)
+    if args.specs:
+        print_specs(d, inf, paint, accent)
+    return 0
+
+
+if __name__ == "__main__" and cli_requested(sys.argv):
+    try:
+        sys.exit(cli_main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except SystemExit:
+        raise
+    except BaseException:
+        write_log("Erreur en mode CLI :\n" + traceback.format_exc())
+        traceback.print_exc()
+        sys.exit(1)
+
 
 try:
     from PySide6.QtCore import QEvent, QLockFile, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl
@@ -3126,6 +3568,7 @@ def parse_args(argv=None):
     p.add_argument("--wallpaper", metavar="IMAGE", help=tr("cli_wallpaper"))
     p.add_argument("--fastfetch", metavar="PATH", help=tr("cli_fastfetch"))
     p.add_argument("--lang", choices=("auto", "fr", "en"), default=None, help=tr("cli_lang"))
+    p.add_argument("--cli", action="store_true", help=tr("cli_cli"))   # traité avant Qt / handled before Qt
     p.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)  # contrôle automatique (CI)
                                                                               # automatic check (CI)
     args = p.parse_args(argv)

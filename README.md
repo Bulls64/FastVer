@@ -17,11 +17,32 @@ Une fenêtre « À propos » pour [Fastfetch](https://github.com/fastfetch-cli/f
 
 ## Installation
 
-- **Windows :** téléchargez `FastVer.exe` depuis la [dernière version](../../releases/latest). Fastfetch doit être installé (`winget install Fastfetch-cli.Fastfetch`).
+- **Windows :** téléchargez `FastVer.exe` depuis la [dernière version](../../releases/latest) (ou `FastVer-cli.exe` pour la version en ligne de commande). Fastfetch doit être installé (`winget install Fastfetch-cli.Fastfetch`).
 - **Linux :** téléchargez `FastVer-x86_64.AppImage`, rendez-le exécutable (`chmod +x FastVer-x86_64.AppImage`) et lancez-le. Il embarque Python et Qt ; il faut seulement Fastfetch et une distribution avec glibc 2.34 ou plus (Ubuntu 22.04, Debian 12, Fedora 35, RHEL 9 et plus récentes). Si FUSE manque : `./FastVer-x86_64.AppImage --appimage-extract-and-run`.
 - **Script :** `pip install PySide6-Fluent-Widgets`, puis `python fastver.py`.
 
 L'exe n'est pas signé : au premier lancement, SmartScreen demande une confirmation (« Informations complémentaires » → « Exécuter quand même »).
+
+## Version en ligne de commande
+
+<p align="center">
+  <img src="docs/screenshots/cli.png" width="700" alt="FastVer --cli dans un terminal Ubuntu : logo de Fastfetch et fiche « À propos »">
+</p>
+
+`fastver --cli` affiche la même fiche dans le terminal, sans fenêtre : logo en couleur, système, version, licence. Elle ne demande ni Qt ni QFluentWidgets : `python fastver.py --cli` marche avec un Python seul.
+
+- **Windows :** `FastVer-cli.exe` (exe console, environ 9 Mo) démarre directement dans ce mode. `FastVer.exe --cli` marche aussi depuis une invite de commandes.
+- **Linux :** `./FastVer-x86_64.AppImage --cli`, ou un lien nommé `fastver-cli` vers l'AppImage ou vers `fastver.py`.
+
+| Option | Effet |
+| --- | --- |
+| `-s`, `--specs` | ajoute les spécifications de l'appareil, avec des jauges pour la mémoire et les disques |
+| `--json` | sortie JSON, pour les scripts |
+| `--check` | recherche les mises à jour de Fastfetch et de FastVer |
+| `--update fastfetch\|fastver\|all` | installe les mises à jour (même vérification SHA-256 que la fenêtre) |
+| `--backups`, `--delete-backups` | liste ou supprime les anciennes versions gardées (avec confirmation, ou `-y`) |
+| `--no-color`, `--no-logo` | sans couleurs ni liens, sans logo (couleurs coupées aussi par `NO_COLOR` ou une sortie redirigée) |
+| `--demo`, `--fastfetch CHEMIN`, `--lang fr\|en` | comme pour la fenêtre |
 
 ## Mises à jour
 
@@ -36,11 +57,11 @@ FastVer peut se mettre à jour lui-même depuis les releases de ce dépôt (Rég
 1. Changer `APP_VERSION` et `BUILD` dans `fastver.py`.
 2. `git tag v1.2.0 && git push origin v1.2.0`
 
-Le workflow `.github/workflows/release.yml` compile alors l'exe sur Windows et l'AppImage sur Ubuntu 22.04, lance leur autotest (`--selftest`), calcule les empreintes et publie la release avec `FastVer.exe`, `FastVer-x86_64.AppImage`, `fastver.py`, leurs `.sha256` et `SHA256SUMS`.
+Le workflow `.github/workflows/release.yml` compile alors les deux exe sur Windows et l'AppImage sur Ubuntu 22.04, les teste (`--selftest` pour la fenêtre, `--demo` et `--json` pour la version CLI), calcule les empreintes et publie la release avec `FastVer.exe`, `FastVer-cli.exe`, `FastVer-x86_64.AppImage`, `fastver.py`, leurs `.sha256` et `SHA256SUMS`.
 
 Compilation locale (dépendances) : `pip install -r requirements-build.txt`, puis `pip install --no-deps -r requirements-nodeps.txt`.
 
-- **Exe :** `python tools/make_version_info.py`, puis `python -m PyInstaller --noconfirm --clean FastVer.spec`.
+- **Exe :** `python tools/make_version_info.py`, puis `python -m PyInstaller --noconfirm --clean FastVer.spec` (et `FastVer-cli.spec` pour la version CLI).
 - **AppImage :** `bash tools/build_appimage.sh` (binutils requis ; appimagetool est téléchargé s'il manque).
 
 ## Licence
@@ -59,11 +80,28 @@ The screenshots above show, in order: the light theme, the dark theme with the d
 
 ## Installation
 
-- **Windows:** download `FastVer.exe` from the [latest release](../../releases/latest). Fastfetch must be installed (`winget install Fastfetch-cli.Fastfetch`).
+- **Windows:** download `FastVer.exe` from the [latest release](../../releases/latest) (or `FastVer-cli.exe` for the command-line version). Fastfetch must be installed (`winget install Fastfetch-cli.Fastfetch`).
 - **Linux:** download `FastVer-x86_64.AppImage`, make it executable (`chmod +x FastVer-x86_64.AppImage`) and run it. It bundles Python and Qt; all you need is Fastfetch and a distribution with glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35, RHEL 9 and newer). If FUSE is missing: `./FastVer-x86_64.AppImage --appimage-extract-and-run`.
 - **Script:** `pip install PySide6-Fluent-Widgets`, then `python fastver.py`.
 
 The exe is not signed: on first launch, SmartScreen asks for confirmation (“More info” → “Run anyway”).
+
+## Command-line version
+
+`fastver --cli` shows the same card in the terminal, without a window (screenshot above, in the French section): colored logo, system, version, license. It needs neither Qt nor QFluentWidgets: `python fastver.py --cli` works with plain Python.
+
+- **Windows:** `FastVer-cli.exe` (console exe, about 9 MB) starts directly in this mode. `FastVer.exe --cli` also works from a command prompt.
+- **Linux:** `./FastVer-x86_64.AppImage --cli`, or a link named `fastver-cli` to the AppImage or to `fastver.py`.
+
+| Option | Effect |
+| --- | --- |
+| `-s`, `--specs` | adds the device specifications, with gauges for memory and disks |
+| `--json` | JSON output, for scripts |
+| `--check` | checks for Fastfetch and FastVer updates |
+| `--update fastfetch\|fastver\|all` | installs the updates (same SHA-256 check as the window) |
+| `--backups`, `--delete-backups` | lists or deletes the old versions kept (with confirmation, or `-y`) |
+| `--no-color`, `--no-logo` | no colors or links, no logo (colors are also turned off by `NO_COLOR` or redirected output) |
+| `--demo`, `--fastfetch PATH`, `--lang fr\|en` | as for the window |
 
 ## Updates
 
@@ -74,11 +112,11 @@ FastVer can update itself from this repository's releases (Settings → FastVer 
 1. Change `APP_VERSION` and `BUILD` in `fastver.py`.
 2. `git tag v1.2.0 && git push origin v1.2.0`
 
-The `.github/workflows/release.yml` workflow then builds the exe on Windows and the AppImage on Ubuntu 22.04, runs their self-test (`--selftest`), computes the hashes and publishes the release with `FastVer.exe`, `FastVer-x86_64.AppImage`, `fastver.py`, their `.sha256` files and `SHA256SUMS`.
+The `.github/workflows/release.yml` workflow then builds both exes on Windows and the AppImage on Ubuntu 22.04, tests them (`--selftest` for the window, `--demo` and `--json` for the CLI version), computes the hashes and publishes the release with `FastVer.exe`, `FastVer-cli.exe`, `FastVer-x86_64.AppImage`, `fastver.py`, their `.sha256` files and `SHA256SUMS`.
 
 Local build (dependencies): `pip install -r requirements-build.txt`, then `pip install --no-deps -r requirements-nodeps.txt`.
 
-- **Exe:** `python tools/make_version_info.py`, then `python -m PyInstaller --noconfirm --clean FastVer.spec`.
+- **Exe:** `python tools/make_version_info.py`, then `python -m PyInstaller --noconfirm --clean FastVer.spec` (and `FastVer-cli.spec` for the CLI version).
 - **AppImage:** `bash tools/build_appimage.sh` (binutils required; appimagetool is downloaded if missing).
 
 ## License

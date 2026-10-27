@@ -1,7 +1,7 @@
-# Compile FastVer.exe (Windows) et FastVer-x86_64.AppImage (Linux), les vérifie, calcule les empreintes SHA-256
-# et publie la release.
-# Builds FastVer.exe (Windows) and FastVer-x86_64.AppImage (Linux), checks them, computes the SHA-256 checksums
-# and publishes the release.
+# Compile FastVer.exe et FastVer-cli.exe (Windows) et FastVer-x86_64.AppImage (Linux), les vérifie, calcule les
+# empreintes SHA-256 et publie la release.
+# Builds FastVer.exe and FastVer-cli.exe (Windows) and FastVer-x86_64.AppImage (Linux), checks them, computes the
+# SHA-256 checksums and publishes the release.
 #
 # Publier une version / publish a version :
 #   1. changer APP_VERSION (et BUILD) dans fastver.py / change APP_VERSION (and BUILD) in fastver.py
@@ -48,6 +48,7 @@ jobs:
         run: |
           python tools/make_version_info.py
           python -m PyInstaller --noconfirm --clean FastVer.spec
+          python -m PyInstaller --noconfirm --clean FastVer-cli.spec
 
       - name: Autotest de l'exe / exe self-test
         shell: pwsh
@@ -57,10 +58,22 @@ jobs:
           Get-Content (Join-Path $env:TEMP "fastver.log") -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "Autotest en échec (code $($p.ExitCode))" }
 
+      - name: Test de FastVer-cli.exe / FastVer-cli.exe test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          dist\FastVer-cli.exe --version
+          dist\FastVer-cli.exe --demo --specs --no-color
+          if ($LASTEXITCODE -ne 0) { throw "FastVer-cli.exe en échec (code $LASTEXITCODE)" }
+          $j = (dist\FastVer-cli.exe --demo --json | Out-String) | ConvertFrom-Json
+          if ($j.os.host -ne "PC-DEMO" -or $j.specs.Count -lt 10) { throw "Sortie JSON inattendue" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/FastVer.exe
+          path: |
+            dist/FastVer.exe
+            dist/FastVer-cli.exe
 
   linux:
     # Ubuntu 22.04 : les bibliothèques ajoutées à l'AppImage restent compatibles avec glibc 2.34,
@@ -101,6 +114,11 @@ jobs:
           xvfb-run -a release/FastVer-x86_64.AppImage --selftest || { cat /tmp/fastver.log; exit 1; }
           cat /tmp/fastver.log
 
+      - name: Mode CLI de l'AppImage / AppImage CLI mode
+        run: |
+          release/FastVer-x86_64.AppImage --cli --demo --specs --no-color
+          release/FastVer-x86_64.AppImage --cli --demo --json | python -c "import json, sys; assert json.load(sys.stdin)['os']['host'] == 'PC-DEMO'"
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux
@@ -119,9 +137,10 @@ jobs:
       - name: Empreintes SHA-256 / checksums
         run: |
           mkdir release
-          cp artifacts/windows/FastVer.exe artifacts/linux/FastVer-x86_64.AppImage fastver.py release/
+          cp artifacts/windows/FastVer.exe artifacts/windows/FastVer-cli.exe artifacts/linux/FastVer-x86_64.AppImage \
+            fastver.py release/
           cd release
-          for f in FastVer.exe FastVer-x86_64.AppImage fastver.py; do
+          for f in FastVer.exe FastVer-cli.exe FastVer-x86_64.AppImage fastver.py; do
             sha256sum "$f" > "$f.sha256"
           done
           cat *.sha256 > SHA256SUMS
