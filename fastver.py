@@ -2500,7 +2500,7 @@ class LogoWidget(QWidget):
 
     BOX_W, BOX_H = 180, 160
 
-    def __init__(self, lines, parent=None):
+    def __init__(self, lines, parent=None, pad=18):
         super().__init__(parent)
         self.rows = len(lines)
         self.cols = max((sum(len(s[0]) for s in ln) for ln in lines), default=0)
@@ -2514,7 +2514,6 @@ class LogoWidget(QWidget):
         fm = QFontMetricsF(self.font_)
         self.cw, self.lh, self.ascent = fm.horizontalAdvance("M"), fm.height(), fm.ascent()
         self.logo_w, self.logo_h = self.cols * self.cw, self.rows * self.lh
-        pad = 18
         self.setFixedSize(int(self.logo_w + pad * 2), int(self.logo_h + pad * 2))
         self.pad = pad
         self.phase, self.fade = 0.0, 0.0
@@ -3082,17 +3081,22 @@ class FastVerWindow(FramelessWindow):
 
         # Bandeau : logo + mot-symbole
         # Banner: logo + wordmark
+        # Aligné à gauche comme la maquette WinUI 3 : le bord visible du logo est à 8 px du bord des cartes
+        # (halo du widget réduit à 8 px), 32 px entre le logo et le texte, texte centré verticalement sur le logo.
+        # Left-aligned like the WinUI 3 mockup: the logo's visible edge sits 8 px from the cards' edge
+        # (widget halo reduced to 8 px), 32 px between logo and text, text vertically centered on the logo.
         hero = QHBoxLayout()
-        hero.setSpacing(20)
-        hero.addStretch(1)
-        logo = LogoWidget(d.logo, c) if d.logo else None
+        logo = LogoWidget(d.logo, c, pad=8) if d.logo else None
+        halo = logo.pad if logo else 0
+        hero.setContentsMargins(0, 0, 0, 0)
+        hero.setSpacing(max(0, 32 - halo))
         if logo:
             hero.addWidget(logo, 0, Qt.AlignmentFlag.AlignVCenter)
         words = QVBoxLayout()
-        words.setSpacing(10)
+        words.setSpacing(12)
         words.addStretch(1)
         logo_w = logo.width() if logo else 0
-        avail = self.WIDTH - 64 - logo_w - 20 - 8
+        avail = self.WIDTH - 64 - logo_w - hero.spacing() - 8
 
         def wordmark_width(px):
             bold = QFontMetricsF(qfont(TITLE_FAMILIES, px, QFont.Weight.DemiBold))
@@ -3107,6 +3111,7 @@ class FastVerWindow(FramelessWindow):
         mark = QLabel(c)
         mark.setTextFormat(Qt.TextFormat.RichText)
         mark.setWordWrap(False)
+        mark.setContentsMargins(0, 0, 0, 0)
         mark.setText(f"<span style=\"font-family:{fam}; font-size:{size}px; font-weight:600\">"
                      f"{html_escape(inf['first'])}</span>"
                      f"{'<br>' if split else ' '}"
@@ -3125,8 +3130,7 @@ class FastVerWindow(FramelessWindow):
         tags.addStretch(1)
         words.addLayout(tags)
         words.addStretch(1)
-        hero.addLayout(words)
-        hero.addStretch(1)
+        hero.addLayout(words, 1)
         lay.addLayout(hero)
         lay.addSpacing(20)
 
