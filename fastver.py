@@ -110,10 +110,35 @@ if os.name == "nt":
 # no import may happen later, inside a function called once Qt is loaded.
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.3.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-10-27-m"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-01-a"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
+# Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
+# Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
+# What's new, shown in the “What's new in v…” window (most recent first).
+# Add an entry with every new version; only the APP_VERSION one is shown.
+CHANGELOG = {
+    "1.4.0": {
+        "fr": ["Nouvelle fenêtre « Nouveautés » : elle s'ouvre au premier démarrage d'une nouvelle version, "
+               "et à tout moment depuis les Réglages.",
+               "Réglage pour ne plus l'afficher automatiquement au démarrage.",
+               "En-tête de la fenêtre principale aligné à gauche, façon Windows 11 : logo, nom du système "
+               "et pastilles mieux espacés."],
+        "en": ["New “What's new” window: it opens on the first launch of a new version, "
+               "and any time from Settings.",
+               "Setting to stop showing it automatically at startup.",
+               "Main window header left-aligned, Windows 11 style: logo, system name "
+               "and tags better spaced."],
+    },
+    "1.3.0": {
+        "fr": ["Version en ligne de commande : fastver --cli, et FastVer-cli.exe sous Windows.",
+               "Sortie en couleurs, sortie JSON (--json), vérification et mise à jour depuis le terminal."],
+        "en": ["Command-line version: fastver --cli, and FastVer-cli.exe on Windows.",
+               "Colored output, JSON output (--json), checking and updating from the terminal."],
+    },
+}
+
 UPDATE_REPO = "Bulls64/FastVer"   # dépôt GitHub où publier les nouvelles versions (assets « fastver.py »,
                                   # « FastVer.exe » et leurs empreintes « .sha256 »)
                                   # GitHub repository where new versions are published (assets “fastver.py”,
@@ -195,7 +220,8 @@ def config_dir():
 
 
 class Settings(dict):
-    DEFAULTS = {"language": "auto", "fastfetch_auto_update": False, "app_auto_update": False}
+    DEFAULTS = {"language": "auto", "fastfetch_auto_update": False, "app_auto_update": False,
+                "whats_new_auto": True, "whats_new_seen": ""}
 
     def __init__(self):
         super().__init__(self.DEFAULTS)
@@ -330,6 +356,15 @@ STRINGS = {
         "ff_not_yet": "{tool} ne propose pas encore la version {latest} (version installée : {local}). "
                       "Réessayez plus tard ou téléchargez-la sur la page de Fastfetch.",
         "group_backups": "Anciennes versions",
+        "group_whats_new": "Nouveautés",
+        "whats_new_title": "Nouveautés de la v{version}",
+        "whats_new_desc": "Ce qui a changé dans cette version de FastVer",
+        "whats_new_show": "Afficher",
+        "whats_new_auto": "Afficher au démarrage",
+        "whats_new_auto_desc": "Ouvre cette fenêtre au premier lancement de chaque nouvelle version",
+        "whats_new_build": "Build {build}",
+        "whats_new_none": "Corrections et améliorations diverses.",
+        "close": "Fermer",
         "backups_title": "Copies de sauvegarde",
         "backups_desc": "{n} anciennes versions de FastVer gardées après des mises à jour · {size}",
         "backups_desc_1": "Une ancienne version de FastVer gardée après une mise à jour · {size}",
@@ -487,6 +522,15 @@ STRINGS = {
         "ff_not_yet": "{tool} doesn't offer version {latest} yet (installed version: {local}). "
                       "Try again later or download it from the Fastfetch page.",
         "group_backups": "Previous versions",
+        "group_whats_new": "What's new",
+        "whats_new_title": "What's new in v{version}",
+        "whats_new_desc": "What changed in this version of FastVer",
+        "whats_new_show": "Show",
+        "whats_new_auto": "Show at startup",
+        "whats_new_auto_desc": "Opens this window on the first launch of each new version",
+        "whats_new_build": "Build {build}",
+        "whats_new_none": "Various fixes and improvements.",
+        "close": "Close",
         "backups_title": "Backup copies",
         "backups_desc": "{n} previous FastVer versions kept after updates · {size}",
         "backups_desc_1": "One previous FastVer version kept after an update · {size}",
@@ -2214,7 +2258,7 @@ try:
                                    QVBoxLayout, QWidget)
     from qfluentwidgets import (BodyLabel, CaptionLabel, ComboBox, ExpandGroupSettingCard, FluentIcon as FIF,
                                 FluentTitleBar, IconWidget, IndeterminateProgressRing, IndicatorPosition,
-                                InfoBar, InfoBarPosition, PrimaryPushButton, ProgressBar, PushButton,
+                                InfoBar, InfoBarPosition, MessageBoxBase, PrimaryPushButton, ProgressBar, PushButton,
                                 SettingCard, SimpleCardWidget, SmoothScrollArea,
                                 StrongBodyLabel, SubtitleLabel, SwitchButton, Theme, TitleLabel,
                                 ToolTipFilter, TransparentToolButton, isDarkTheme, setTheme,
@@ -2492,6 +2536,46 @@ def text_color(alpha=1.0):
     c = QColor(255, 255, 255) if isDarkTheme() else QColor(0, 0, 0)
     c.setAlphaF(alpha * (1.0 if isDarkTheme() else 0.9))
     return c
+
+
+class WhatsNewDialog(MessageBoxBase):
+    """Fenêtre « Nouveautés de la v… » (boîte Fluent posée sur la fenêtre, fond assombri).
+    “What's new in v…” window (Fluent box laid over the window, dimmed background)."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        items = CHANGELOG.get(APP_VERSION, {}).get(LANG) or [tr("whats_new_none")]
+        head = QHBoxLayout()
+        head.setSpacing(12)
+        icon = IconWidget(FIF.MEGAPHONE, self.widget)
+        icon.setFixedSize(24, 24)
+        head.addWidget(icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        titles = QVBoxLayout()
+        titles.setSpacing(0)
+        titles.addWidget(SubtitleLabel(tr("whats_new_title", version=APP_VERSION), self.widget))
+        build = CaptionLabel(tr("whats_new_build", build=BUILD), self.widget)
+        build.setTextColor(QColor(0, 0, 0, 140), QColor(255, 255, 255, 140))
+        titles.addWidget(build)
+        head.addLayout(titles, 1)
+        self.viewLayout.addLayout(head)
+        self.viewLayout.addSpacing(8)
+        for text in items:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            dot = BodyLabel("•", self.widget)
+            dot.setTextColor(themeColor(), themeColor())
+            row.addWidget(dot, 0, Qt.AlignmentFlag.AlignTop)
+            lbl = BodyLabel(text, self.widget)
+            lbl.setWordWrap(True)
+            row.addWidget(lbl, 1)
+            self.viewLayout.addLayout(row)
+        self.viewLayout.setSpacing(8)
+        self.yesButton.setText(tr("close"))
+        self.cancelButton.hide()
+        self.buttonLayout.insertStretch(0, 1)   # bouton « Fermer » à droite / “Close” button on the right
+        self.buttonLayout.setStretchFactor(self.yesButton, 0)
+        self.yesButton.setMinimumWidth(140)
+        self.widget.setFixedWidth(min(460, max(320, parent.width() - 64)))
 
 
 class LogoWidget(QWidget):
@@ -2923,6 +3007,8 @@ class FastVerWindow(FramelessWindow):
         if not self._auto_started:
             self._auto_started = True
             QTimer.singleShot(1200, self.start_auto_updates)
+            if not self.args.selftest:
+                QTimer.singleShot(500, self.maybe_show_whats_new)
 
     def render(self):
         self.clear()
@@ -3325,6 +3411,20 @@ class FastVerWindow(FramelessWindow):
             self._sync_update_ui(kind)
             lay.addSpacing(24)
 
+        # Nouveautés : ouverture manuelle + affichage automatique au démarrage
+        # What's new: open manually + automatic display at startup
+        self._section(tr("group_whats_new"), lay, c)
+        news = self._fluid_card(FIF.MEGAPHONE, tr("whats_new_title", version=APP_VERSION), tr("whats_new_desc"), c)
+        show = PushButton(tr("whats_new_show"), news)
+        show.clicked.connect(lambda _=False: self.show_whats_new())
+        self._card_controls(news, show)
+        lay.addWidget(news)
+        lay.addSpacing(3)
+        auto = self._fluid_card(FIF.RINGER, tr("whats_new_auto"), tr("whats_new_auto_desc"), c)
+        self._card_controls(auto, self._switch(auto, SETTINGS["whats_new_auto"], self.set_whats_new_auto))
+        lay.addWidget(auto)
+        lay.addSpacing(24)
+
         # Copies gardées après les mises à jour : supprimées seulement sur demande (bouton).
         # Copies kept after updates: deleted only when asked (button).
         backups = list_backups()
@@ -3361,6 +3461,29 @@ class FastVerWindow(FramelessWindow):
     def set_auto(self, kind, value):
         SETTINGS[f"{kind}_auto_update"] = bool(value)
         SETTINGS.save()
+
+    # ── Nouveautés ────────────────────────────────────────────────────────
+    # ── What's new ────────────────────────────────────────────────────────
+    def set_whats_new_auto(self, value):
+        SETTINGS["whats_new_auto"] = bool(value)
+        SETTINGS.save()
+
+    def maybe_show_whats_new(self):
+        """Au premier démarrage d'une nouvelle version, ouvre « Nouveautés » (si le réglage le permet).
+        On the first launch of a new version, opens “What's new” (if the setting allows it)."""
+        if SETTINGS["whats_new_seen"] == APP_VERSION:
+            return
+        SETTINGS["whats_new_seen"] = APP_VERSION   # une seule fois par version / once per version
+        SETTINGS.save()
+        if SETTINGS["whats_new_auto"] and self.isVisible():
+            self.show_whats_new()
+
+    def show_whats_new(self):
+        if getattr(self, "_news_box", None) is not None:
+            return
+        box = self._news_box = WhatsNewDialog(self)
+        box.finished.connect(lambda _=0: setattr(self, "_news_box", None))
+        box.exec()
 
     # ── Mises à jour ──────────────────────────────────────────────────────
     # ── Updates ───────────────────────────────────────────────────────────
@@ -3653,6 +3776,7 @@ def run_selftest(app, win):
 
     steps = [
         check_data, win.toggle_specs, win.toggle_theme, win.open_settings, win.toggle_theme, win.close_settings,
+        lambda: QTimer.singleShot(400, lambda: getattr(win, "_news_box", None) and win._news_box.accept()) or win.show_whats_new(),
         lambda: win.material and win.material.pixmap(win.screen(), isDarkTheme()),
     ]
     state = {"i": 0}
