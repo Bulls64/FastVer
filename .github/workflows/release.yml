@@ -111,8 +111,8 @@ jobs:
       - name: Autotest de l'AppImage / AppImage self-test
         timeout-minutes: 3
         run: |
-          xvfb-run -a release/FastVer-x86_64.AppImage --selftest || { cat /tmp/fastver.log; exit 1; }
-          cat /tmp/fastver.log
+          xvfb-run -a release/FastVer-x86_64.AppImage --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
+          cat ~/.cache/FastVer/fastver.log
 
       - name: Mode CLI de l'AppImage / AppImage CLI mode
         run: |

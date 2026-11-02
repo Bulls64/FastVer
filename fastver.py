@@ -112,7 +112,7 @@ if os.name == "nt":
 APP_NAME = "FastVer"
 APP_VERSION = "1.4.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-02-a"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-02-b"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
@@ -182,7 +182,19 @@ if FROZEN and sys.platform.startswith("linux"):
     else:
         os.environ.pop("LD_LIBRARY_PATH", None)
 NO_WINDOW = {"creationflags": 0x08000000} if os.name == "nt" else {}  # CREATE_NO_WINDOW
-LOG_PATH = os.path.join(tempfile.gettempdir(), "fastver.log")
+def _log_dir():
+    """Dossier du journal, propre à l'utilisateur : %TEMP% sous Windows, ~/Library/Logs/FastVer sous macOS,
+    ~/.cache/FastVer ailleurs (pas /tmp, partagé entre utilisateurs : un autre compte pourrait y créer le fichier).
+    Log folder, specific to the user: %TEMP% on Windows, ~/Library/Logs/FastVer on macOS,
+    ~/.cache/FastVer elsewhere (not /tmp, shared between users: another account could create the file there)."""
+    if os.name == "nt":
+        return tempfile.gettempdir()
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Logs/FastVer")
+    return os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "FastVer")
+
+
+LOG_PATH = os.path.join(_log_dir(), "fastver.log")
 LOG_MAX = 512 * 1024   # au-delà, le journal est renommé en fastver.log.1 (un seul ancien journal gardé)
                        # beyond this, the log is renamed to fastver.log.1 (only one old log kept)
 APP_PATH = os.path.abspath(APPIMAGE or (sys.executable if FROZEN else __file__))  # fichier lancé
@@ -191,6 +203,7 @@ APP_PATH = os.path.abspath(APPIMAGE or (sys.executable if FROZEN else __file__))
 
 def write_log(text):
     try:
+        os.makedirs(os.path.dirname(LOG_PATH), mode=0o700, exist_ok=True)
         if os.path.getsize(LOG_PATH) > LOG_MAX:
             os.replace(LOG_PATH, LOG_PATH + ".1")
     except OSError:
@@ -849,10 +862,28 @@ class FFData:
         self.when = datetime.datetime.now()
 
 
+def find_program(name):
+    """Comme shutil.which, mais sans jamais regarder le dossier courant : sous Windows, shutil.which le
+    fouille en premier, et un « fastfetch.exe » ou « winget.exe » déposé dans le dossier d'où FastVer est
+    lancé (souvent Téléchargements) serait exécuté à la place du vrai. Seuls les dossiers absolus du PATH comptent.
+    Like shutil.which, but never looks in the current folder: on Windows, shutil.which searches it first,
+    and a “fastfetch.exe” or “winget.exe” dropped in the folder FastVer is launched from (often Downloads)
+    would run instead of the real one. Only absolute PATH folders count."""
+    if os.path.dirname(name):
+        return shutil.which(name)   # chemin explicite / explicit path
+    for d in (os.environ.get("PATH") or "").split(os.pathsep):
+        d = d.strip().strip('"')
+        if d and os.path.isabs(d):
+            found = shutil.which(os.path.join(d, name))   # avec un dossier, which ne regarde que celui-ci
+            if found:                                     # with a folder, which looks only there
+                return found
+    return None
+
+
 def find_fastfetch(custom=None):
     if custom:
-        return custom if (os.path.isfile(custom) or shutil.which(custom)) else None
-    exe = shutil.which("fastfetch")
+        return custom if (os.path.isfile(custom) or find_program(custom)) else None
+    exe = find_program("fastfetch")
     if exe:
         return exe
     if os.name == "nt":
@@ -1261,7 +1292,7 @@ def ff_local_version(exe):
 def winget_exe():
     """winget est un alias d'application Windows que shutil.which ne trouve pas toujours.
     winget is a Windows app alias that shutil.which doesn't always find."""
-    found = shutil.which("winget")
+    found = find_program("winget")
     if found or os.name != "nt":
         return found
     alias = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe")
@@ -1309,7 +1340,7 @@ FF_UPDATE_ARGS = {
 def ff_update_command(method):
     if method not in FF_UPDATE_ARGS:
         return None
-    tool = winget_exe() if method == "winget" else shutil.which(method)
+    tool = winget_exe() if method == "winget" else find_program(method)
     return [tool] + FF_UPDATE_ARGS[method] if tool else None
 
 
@@ -1320,7 +1351,7 @@ def system_update_hint():
                       ("dnf", "sudo dnf upgrade fastfetch"), ("zypper", "sudo zypper update fastfetch"),
                       ("apk", "sudo apk upgrade fastfetch"), ("xbps-install", "sudo xbps-install -Su fastfetch"),
                       ("emerge", "sudo emerge -u app-misc/fastfetch")):
-        if shutil.which(tool):
+        if find_program(tool):
             return cmd
     return None
 
@@ -1470,6 +1501,8 @@ def app_install_binary(url, sha256):
         if os.name != "nt":
             os.chmod(new, 0o755)   # l'AppImage doit rester exécutable / the AppImage must stay executable
     except OSError as e:
+        _silent_remove(new)        # pas de fichier partiel laissé à côté du programme (disque plein…)
+                                   # no partial file left next to the program (disk full…)
         raise UpdateError(tr("write_error", path=new, err=e))
     try:
         os.replace(target, backup)   # renommer l'exe en cours d'exécution est autorisé
@@ -3018,6 +3051,8 @@ class FastVerWindow(FramelessWindow):
             self.show_error(*self.error)
         elif self.data:
             self.build()
+        force_plain_text(self)   # valeurs et messages affichés tels quels, jamais comme du HTML
+                                 # values and messages shown as-is, never as HTML
         QTimer.singleShot(0, self.fit_height)
 
     # ── Taille et position ────────────────────────────────────────────────
@@ -3662,6 +3697,7 @@ class FastVerWindow(FramelessWindow):
                                       parent=self)
         if button is not None:
             bar.addWidget(button)
+        force_plain_text(bar)
         return bar
 
     def start_auto_updates(self):
@@ -3684,6 +3720,20 @@ class FastVerWindow(FramelessWindow):
         sep = " : " if LANG == "fr" else ": "
         lines = [inf["pretty"], inf["line2"], ""] + [f"{k}{sep}{v}" for k, _, v, _ in spec_rows(self.data, inf)]
         self.copy("\n".join(lines), tr("copied_all"))
+
+
+def force_plain_text(widget):
+    """Les étiquettes Qt interprètent par défaut le HTML qu'elles devinent : une valeur de Fastfetch (nom du
+    Wi-Fi, titre d'un morceau…) ou un message d'erreur contenant des balises serait mise en forme, voire
+    afficherait une image ou un faux lien. Toute étiquette restée en mode automatique passe en texte brut ;
+    celles qui affichent du HTML voulu (nom du système, lien de licence…) sont déjà en RichText.
+    Qt labels interpret the HTML they guess by default: a Fastfetch value (Wi-Fi name, song title…) or an
+    error message containing tags would be formatted, or even show an image or a fake link. Every label still in
+    automatic mode is switched to plain text; those showing intended HTML (system name, license link…) are
+    already RichText."""
+    for lbl in [widget] + widget.findChildren(QLabel):
+        if isinstance(lbl, QLabel) and lbl.textFormat() == Qt.TextFormat.AutoText:
+            lbl.setTextFormat(Qt.TextFormat.PlainText)
 
 
 def html_escape(s):
