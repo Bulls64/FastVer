@@ -112,7 +112,7 @@ if os.name == "nt":
 APP_NAME = "FastVer"
 APP_VERSION = "1.4.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-01-a"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-02-a"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
@@ -3442,8 +3442,17 @@ class FastVerWindow(FramelessWindow):
             lay.addSpacing(24)
         lay.addStretch(1)
 
-        self._footer(f"{APP_NAME} {APP_VERSION} · build {BUILD} · github.com/{UPDATE_REPO}",
-                     [(tr("done"), None, self.close_settings, True)])
+        self._footer("", [(tr("done"), None, self.close_settings, True)])
+        # Lien du projet cliquable dans le pied de page / clickable project link in the footer
+        link = QColor(themeColor())
+        if isDarkTheme():
+            link = link.lighter(150)
+        self.status.setTextFormat(Qt.TextFormat.RichText)
+        self.status.setOpenExternalLinks(True)
+        self.status.setText(f"{html_escape(f'{APP_NAME} {APP_VERSION} · build {BUILD} · ')}"
+                            f"<a href=\"https://github.com/{UPDATE_REPO}\" "
+                            f"style=\"color:{link.name()}; text-decoration:none\">github.com/{UPDATE_REPO}</a>")
+        self.status.setCursor(Qt.CursorShape.ArrowCursor)
 
     def set_lang(self, code):
         SETTINGS["language"] = code
