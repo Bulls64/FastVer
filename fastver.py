@@ -157,7 +157,13 @@ UPDATE_REPO = "Bulls64/FastVer"   # dépôt GitHub où publier les nouvelles ver
                                   # “FastVer.exe” and their “.sha256” checksums)
 FF_REPO = "fastfetch-cli/fastfetch"
 FF_WINGET_ID = "Fastfetch-cli.Fastfetch"
-GITHUB_API = os.environ.get("FASTVER_GITHUB_API", "https://api.github.com").rstrip("/")
+# FASTVER_GITHUB_API ne sert qu'aux tests, avec un faux serveur local : toute autre adresse est ignorée, pour qu'une
+# variable d'environnement ne puisse pas détourner la mise à jour automatique vers un autre serveur.
+# FASTVER_GITHUB_API is only for tests, with a fake local server: any other address is ignored, so that an
+# environment variable can't divert the automatic update to another server.
+GITHUB_API = os.environ.get("FASTVER_GITHUB_API", "").rstrip("/")
+if not GITHUB_API.startswith("http://127.0.0.1"):
+    GITHUB_API = "https://api.github.com"
 FASTFETCH_URL = "https://github.com/fastfetch-cli/fastfetch"
 LICENSE_URL = FASTFETCH_URL + "/blob/dev/LICENSE"
 JSON_STRUCTURE = "Title:OS:Host:Kernel:Uptime:Packages:Shell:DE:WM:Terminal:CPU:GPU:Memory:Swap:Disk:Locale"
@@ -703,6 +709,28 @@ OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 CSI_RE = re.compile(r"\x1b\[([0-9;?]*)([ -/]*[@-~])")
 
 
+CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def strip_controls(value):
+    """Retire les caractères de contrôle (Échap, BEL, C1…) d'une valeur, ou récursivement d'une liste ou d'un
+    dictionnaire : une valeur venue du système (nom du Wi-Fi, titre d'un morceau…) ne peut plus envoyer de
+    commandes au terminal. Tabulation et saut de ligne sont gardés.
+    Removes control characters (Escape, BEL, C1…) from a value, or recursively from a list or a dict: a value
+    coming from the system (Wi-Fi name, song title…) can no longer send commands to the terminal. Tab and
+    newline are kept."""
+    if isinstance(value, str):
+        return CTRL_RE.sub("", strip_ansi(value))   # séquences complètes d'abord, puis caractères isolés
+                                                    # whole sequences first, then lone characters
+    if isinstance(value, list):
+        return [strip_controls(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(strip_controls(v) for v in value)
+    if isinstance(value, dict):
+        return {k: strip_controls(v) for k, v in value.items()}
+    return value
+
+
 def strip_ansi(s):
     return CSI_RE.sub("", OSC_RE.sub("", s))
 
@@ -1045,6 +1073,10 @@ def load_fastfetch(exe):
 
     if not d.rows and not d.modules:
         raise RuntimeError(tr("ff_no_data") + "\n" + "\n".join(d.errors))
+    # Les séquences de couleur sont déjà décodées : ce qui reste de contrôle n'a rien à faire à l'écran.
+    # Color sequences are already decoded: whatever control remains has no business on screen.
+    d.title, d.version = strip_controls(d.title), strip_controls(d.version)
+    d.rows, d.modules, d.logo = strip_controls(d.rows), strip_controls(d.modules), strip_controls(d.logo)
     fix_self_detection(d)
     if not d.title:
         t = d.modules.get("title") or {}
@@ -1368,10 +1400,16 @@ def system_update_hint():
     return None
 
 
+def safe_page(url, default):
+    """Adresse de page à ouvrir dans le navigateur : seulement https://github.com/…, sinon `default`.
+    Page address to open in the browser: only https://github.com/…, otherwise `default`."""
+    return url if isinstance(url, str) and url.startswith("https://github.com/") and " " not in url else default
+
+
 def ff_check(exe):
     rel = latest_release(FF_REPO)
     info = dict(latest=str(rel.get("tag_name", "")).lstrip("vV"),
-                url=rel.get("html_url") or FASTFETCH_URL + "/releases/latest",
+                url=safe_page(rel.get("html_url"), FASTFETCH_URL + "/releases/latest"),
                 local=ff_local_version(exe) if exe else "", method=None, action=None, hint=None)
     info["action"] = "page"
     if exe:
@@ -1458,7 +1496,7 @@ def app_check():
     except NoRelease:
         return dict(latest=None, url=None, action=None, sha256=None)
     tag = str(rel.get("tag_name", ""))
-    page = rel.get("html_url") or f"https://github.com/{UPDATE_REPO}/releases/latest"
+    page = safe_page(rel.get("html_url"), f"https://github.com/{UPDATE_REPO}/releases/latest")
     asset = next((a.get("browser_download_url") for a in rel.get("assets") or []
                   if APP_ASSET and str(a.get("name", "")).lower() == APP_ASSET.lower()), None)
     sha = release_sha256(rel, APP_ASSET) if asset else None   # APP_ASSET None (« frozen ») → page
@@ -1710,6 +1748,13 @@ def tame_accent(base):
 # ════════════════════════════════════════════════════════════════════════════
 
 PIP_PACKAGE = "PySide6-Fluent-Widgets"
+# Réparation : mêmes paquets que la compilation (PySide6-Essentials, sans le PySide6 complet de plusieurs centaines
+# de Mo), bornés à la version majeure testée pour ne pas installer une version incompatible.
+# Repair: same packages as the build (PySide6-Essentials, without the full PySide6 of several hundred MB),
+# capped at the tested major version so an incompatible release isn't installed.
+PIP_DEPS = ["PySide6-Essentials>=6.8,<7", "PySideSix-Frameless-Window>=0.7,<1", "darkdetect>=0.8"]
+PIP_NODEPS = ["PySide6-Fluent-Widgets>=1.11,<2"]
+PIP_TIMEOUT = 900   # secondes par commande pip / seconds per pip command
 
 
 def _fix_streams():
@@ -1855,7 +1900,7 @@ def run_repair(argv):
             cmd.append("--break-system-packages")
     if broken:
         cmd.append("--force-reinstall")
-    cmd.append(PIP_PACKAGE)
+    cmds = [cmd + PIP_DEPS, cmd + ["--no-deps"] + PIP_NODEPS]
 
     while True:
         root = tkinter.Tk()
@@ -1872,10 +1917,25 @@ def run_repair(argv):
         result = {}
 
         def work():
-            write_log("Commande : " + " ".join(cmd))
-            p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", **NO_WINDOW)
-            result.update(code=p.returncode, out=(p.stdout or "") + (p.stderr or ""))
-            root.after(0, root.destroy)
+            out = ""
+            try:
+                for c in cmds:
+                    write_log("Commande : " + " ".join(c))
+                    try:
+                        p = subprocess.run(c, capture_output=True, text=True, errors="replace",
+                                           timeout=PIP_TIMEOUT, stdin=subprocess.DEVNULL, **NO_WINDOW)
+                    except subprocess.TimeoutExpired:
+                        # réseau figé : on rend la main au lieu de bloquer la fenêtre indéfiniment
+                        # stalled network: give control back instead of blocking the window forever
+                        result.update(code=-1, out=out + f"pip : délai dépassé ({PIP_TIMEOUT} s) / timed out")
+                        return
+                    out += (p.stdout or "") + (p.stderr or "")
+                    if p.returncode != 0:
+                        result.update(code=p.returncode, out=out)
+                        return
+                result.update(code=0, out=out)
+            finally:
+                root.after(0, root.destroy)
 
         threading.Thread(target=work, daemon=True).start()
         root.mainloop()
@@ -3660,7 +3720,7 @@ class FastVerWindow(FramelessWindow):
             restart_app()
             return
         if u.get("action") == "page":
-            QDesktopServices.openUrl(QUrl(u.get("url") or FASTFETCH_URL))
+            QDesktopServices.openUrl(QUrl(safe_page(u.get("url"), FASTFETCH_URL)))
             return
         if u.get("action") != "update" or u.get("state") in ("checking", "updating"):
             return

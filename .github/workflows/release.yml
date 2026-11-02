@@ -15,18 +15,38 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      pin_print:
+        description: "Afficher les empreintes des outils téléchargés sans les exiger (mise à jour des versions épinglées) / print the downloaded tools' checksums without enforcing them"
+        type: boolean
+        default: false
 
+# Lecture seule par défaut ; seule l'étape de publication reçoit le droit d'écrire.
+# Read-only by default; only the publishing job gets write access.
 permissions:
-  contents: write   # nécessaire pour créer la release / needed to create the release
+  contents: read
+
+# Outils téléchargés pendant la compilation : version fixe et empreinte SHA-256 vérifiée (point A2).
+# Pour changer de version : modifier l'adresse, lancer le workflow à la main avec « pin_print », recopier l'empreinte.
+# Tools downloaded during the build: fixed version and verified SHA-256 checksum (item A2).
+# To change version: edit the URL, run the workflow manually with “pin_print”, copy the checksum.
+env:
+  PY_URL: https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.13.14+20260718-x86_64-unknown-linux-gnu-install_only.tar.gz
+  PY_SHA256: ""
+  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+  APPIMAGETOOL_SHA256: ""
+  RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+  RUNTIME_SHA256: ""
+  PIN_PRINT: ${{ inputs.pin_print && '1' || '' }}
 
 jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5
         with:
           python-version: "3.13"
 
@@ -68,7 +88,7 @@ jobs:
           $j = (dist\FastVer-cli.exe --demo --json | Out-String) | ConvertFrom-Json
           if ($j.os.host -ne "PC-DEMO" -or $j.specs.Count -lt 10) { throw "Sortie JSON inattendue" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: windows
           path: |
@@ -83,14 +103,14 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
 
       # Python portable (glibc 2.17) plutôt que celui de setup-python, compilé pour la version d'Ubuntu.
       # Portable Python (glibc 2.17) rather than setup-python's, built for the Ubuntu version.
       - name: Python portable / portable Python
         run: |
-          curl -sSL "https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.13.14+20260718-x86_64-unknown-linux-gnu-install_only.tar.gz" \
-            | tar xz -C "$RUNNER_TEMP"
+          bash tools/fetch_verified.sh "$PY_URL" "$PY_SHA256" "$RUNNER_TEMP/python.tar.gz"
+          tar xzf "$RUNNER_TEMP/python.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/python/bin" >> "$GITHUB_PATH"
 
       - name: Paquets système / system packages
@@ -119,7 +139,7 @@ jobs:
           release/FastVer-x86_64.AppImage --cli --demo --specs --no-color
           release/FastVer-x86_64.AppImage --cli --demo --json | python -c "import json, sys; assert json.load(sys.stdin)['os']['host'] == 'PC-DEMO'"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: linux
           path: release/FastVer-x86_64.AppImage
@@ -127,10 +147,14 @@ jobs:
   release:
     needs: [windows, linux]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # créer la release / create the release
+      id-token: write       # attestations de provenance (Sigstore) / provenance attestations (Sigstore)
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
         with:
           path: artifacts
 
@@ -147,14 +171,28 @@ jobs:
           cat SHA256SUMS
 
       - name: Conserver les fichiers / keep the files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: FastVer
           path: release/*
 
+      # Attestation de provenance signée par GitHub (Sigstore) : prouve que chaque fichier sort de ce workflow,
+      # de ce dépôt et de ce commit. Vérification : gh attestation verify FastVer.exe --repo Bulls64/FastVer
+      # GitHub-signed provenance attestation (Sigstore): proves each file comes from this workflow, repository
+      # and commit. Check: gh attestation verify FastVer.exe --repo Bulls64/FastVer
+      - name: Attestations de provenance / provenance attestations
+        if: github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a   # v3
+        with:
+          subject-path: |
+            release/FastVer.exe
+            release/FastVer-cli.exe
+            release/FastVer-x86_64.AppImage
+            release/fastver.py
+
       - name: Publier la release / publish the release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65   # v2
         with:
           files: release/*
           generate_release_notes: true

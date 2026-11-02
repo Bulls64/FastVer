@@ -4,10 +4,12 @@
 #
 # Prérequis / requirements : python -m pip install -r requirements-build.txt,
 #   python -m pip install --no-deps -r requirements-nodeps.txt, readelf et objdump (binutils),
-#   appimagetool (variable APPIMAGETOOL, sinon téléchargé / otherwise downloaded).
+#   appimagetool (variable APPIMAGETOOL, sinon téléchargé et vérifié / otherwise downloaded and verified).
 # Options : LEGACY_LIBS=<dossier>  bibliothèques plus anciennes à substituer (glibc plus basse)
 #                                  older libraries to substitute (lower glibc requirement)
 #           RUNTIME=<fichier>      runtime AppImage local au lieu de le télécharger / local AppImage runtime
+#           APPIMAGETOOL_SHA256, RUNTIME_SHA256  empreintes attendues / expected checksums
+#           PIN_PRINT=1            affiche les empreintes sans les exiger / prints checksums without enforcing them
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -59,13 +61,24 @@ fi
 echo "▶ appimagetool"
 TOOL=${APPIMAGETOOL:-}
 if [ -z "$TOOL" ]; then
+  # Version fixe et empreinte vérifiée (point A2) ; l'adresse et l'empreinte viennent du workflow.
+  # Fixed version and verified checksum (item A2); the URL and checksum come from the workflow.
   TOOL="$ROOT/build/appimagetool"
-  curl -sSL -o "$TOOL" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$ARCH.AppImage"
+  bash "$ROOT/tools/fetch_verified.sh" \
+    "${APPIMAGETOOL_URL:-https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$ARCH.AppImage}" \
+    "${APPIMAGETOOL_SHA256:-}" "$TOOL"
   chmod +x "$TOOL"
 fi
+if [ -z "${RUNTIME:-}" ]; then
+  # Sans --runtime-file, appimagetool télécharge lui-même le runtime « continuous », non vérifié.
+  # Without --runtime-file, appimagetool downloads the “continuous” runtime itself, unverified.
+  RUNTIME="$ROOT/build/runtime-$ARCH"
+  bash "$ROOT/tools/fetch_verified.sh" \
+    "${RUNTIME_URL:-https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-$ARCH}" \
+    "${RUNTIME_SHA256:-}" "$RUNTIME"
+fi
 mkdir -p "$ROOT/release"
-RT=()
-[ -n "${RUNTIME:-}" ] && RT=(--runtime-file "$RUNTIME")
+RT=(--runtime-file "$RUNTIME")
 APPIMAGE_EXTRACT_AND_RUN=1 ARCH=$ARCH "$TOOL" --no-appstream "${RT[@]}" "$APPDIR" "$OUT"
 chmod +x "$OUT"
 ls -l "$OUT"
