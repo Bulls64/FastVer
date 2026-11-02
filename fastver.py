@@ -110,15 +110,27 @@ if os.name == "nt":
 # no import may happen later, inside a function called once Qt is loaded.
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.4.1"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.2"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-02-c"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-02-d"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
 # What's new, shown in the “What's new in v…” window (most recent first).
 # Add an entry with every new version; only the APP_VERSION one is shown.
 CHANGELOG = {
+    "1.4.2": {
+        "fr": ["Sécurité : les caractères de contrôle sont retirés des informations du système avant l'affichage.",
+               "Sécurité : seules les pages github.com sont ouvertes dans le navigateur, et la mise à jour ne peut plus "
+               "être détournée vers un autre serveur.",
+               "Réparation des dépendances plus légère (PySide6-Essentials), avec des versions testées et un délai maximal.",
+               "Fichiers publiés avec une attestation de provenance signée par GitHub, et outils de compilation vérifiés."],
+        "en": ["Security: control characters are removed from system information before display.",
+               "Security: only github.com pages are opened in the browser, and the update can no longer be "
+               "diverted to another server.",
+               "Lighter dependency repair (PySide6-Essentials), with tested versions and a time limit.",
+               "Released files come with a GitHub-signed provenance attestation, and build tools are verified."],
+    },
     "1.4.1": {
         "fr": ["Sécurité : fastfetch, winget, scoop et choco ne sont plus cherchés dans le dossier courant (Windows).",
                "Sécurité : les valeurs de Fastfetch et les messages sont affichés en texte brut, jamais comme du HTML.",

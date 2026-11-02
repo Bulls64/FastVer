@@ -66,7 +66,7 @@ if [ -z "$TOOL" ]; then
   TOOL="$ROOT/build/appimagetool"
   bash "$ROOT/tools/fetch_verified.sh" \
     "${APPIMAGETOOL_URL:-https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$ARCH.AppImage}" \
-    "${APPIMAGETOOL_SHA256:-}" "$TOOL"
+    "${APPIMAGETOOL_SHA256:-ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0}" "$TOOL"
   chmod +x "$TOOL"
 fi
 if [ -z "${RUNTIME:-}" ]; then
@@ -75,7 +75,7 @@ if [ -z "${RUNTIME:-}" ]; then
   RUNTIME="$ROOT/build/runtime-$ARCH"
   bash "$ROOT/tools/fetch_verified.sh" \
     "${RUNTIME_URL:-https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-$ARCH}" \
-    "${RUNTIME_SHA256:-}" "$RUNTIME"
+    "${RUNTIME_SHA256:-2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d}" "$RUNTIME"
 fi
 mkdir -p "$ROOT/release"
 RT=(--runtime-file "$RUNTIME")

@@ -52,6 +52,12 @@ L'exe n'est pas signé : au premier lancement, SmartScreen demande une confirmat
 
 FastVer peut se mettre à jour lui-même depuis les releases de ce dépôt (Réglages → Application FastVer). Chaque fichier est vérifié avant d'être installé : son empreinte SHA-256 doit correspondre à celle publiée dans le fichier `.sha256` qui l'accompagne et à celle que GitHub calcule pour l'asset. Sans empreinte, ou si elles se contredisent, la mise à jour est refusée.
 
+Depuis la 1.4.2, chaque fichier publié porte aussi une attestation de provenance signée par GitHub (Sigstore) : elle prouve qu'il a été compilé par le workflow de ce dépôt, à partir du commit du tag. Pour la vérifier avec [GitHub CLI](https://cli.github.com) :
+
+```
+gh attestation verify FastVer.exe --repo Bulls64/FastVer
+```
+
 ## Publier une version
 
 1. Changer `APP_VERSION` et `BUILD` dans `fastver.py`.
@@ -106,6 +112,12 @@ The exe is not signed: on first launch, SmartScreen asks for confirmation (“Mo
 ## Updates
 
 FastVer can update itself from this repository's releases (Settings → FastVer app). Every file is checked before it is installed: its SHA-256 hash must match the one published in the `.sha256` file that comes with it and the one GitHub computes for the asset. If there is no hash, or if they disagree, the update is refused.
+
+Since 1.4.2, every released file also carries a GitHub-signed provenance attestation (Sigstore): it proves the file was built by this repository's workflow, from the tagged commit. To check it with [GitHub CLI](https://cli.github.com):
+
+```
+gh attestation verify FastVer.exe --repo Bulls64/FastVer
+```
 
 ## Publishing a release
 

@@ -32,11 +32,11 @@ permissions:
 # To change version: edit the URL, run the workflow manually with “pin_print”, copy the checksum.
 env:
   PY_URL: https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.13.14+20260718-x86_64-unknown-linux-gnu-install_only.tar.gz
-  PY_SHA256: ""
+  PY_SHA256: 5df2686713fcc114290a3b37db3f7253eb837721820ddba4575fdc131e70ec59
   APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-  APPIMAGETOOL_SHA256: ""
+  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
   RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
-  RUNTIME_SHA256: ""
+  RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
   PIN_PRINT: ${{ inputs.pin_print && '1' || '' }}
 
 jobs:
