@@ -110,15 +110,27 @@ if os.name == "nt":
 # no import may happen later, inside a function called once Qt is loaded.
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.4.0"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.1"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-02-b"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-02-c"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
 # What's new, shown in the “What's new in v…” window (most recent first).
 # Add an entry with every new version; only the APP_VERSION one is shown.
 CHANGELOG = {
+    "1.4.1": {
+        "fr": ["Sécurité : fastfetch, winget, scoop et choco ne sont plus cherchés dans le dossier courant (Windows).",
+               "Sécurité : les valeurs de Fastfetch et les messages sont affichés en texte brut, jamais comme du HTML.",
+               "Le journal est rangé dans votre dossier personnel sous Linux et macOS (plus dans /tmp).",
+               "Une mise à jour interrompue (disque plein) ne laisse plus de fichier partiel.",
+               "Le lien github.com/Bulls64/FastVer des Réglages est cliquable."],
+        "en": ["Security: fastfetch, winget, scoop and choco are no longer searched for in the current folder (Windows).",
+               "Security: Fastfetch values and messages are shown as plain text, never as HTML.",
+               "The log now lives in your home folder on Linux and macOS (no longer in /tmp).",
+               "An interrupted update (disk full) no longer leaves a partial file behind.",
+               "The github.com/Bulls64/FastVer link in Settings is clickable."],
+    },
     "1.4.0": {
         "fr": ["Nouvelle fenêtre « Nouveautés » : elle s'ouvre au premier démarrage d'une nouvelle version, "
                "et à tout moment depuis les Réglages.",
