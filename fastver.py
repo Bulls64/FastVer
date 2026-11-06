@@ -72,16 +72,10 @@ Tip: click the logo.
 import argparse
 import colorsys
 import ctypes
-# Importé explicitement AVANT Qt : sous Python 3.15, le système d'import de PySide6 6.12
-# casse les imports différés de concurrent.futures (« 'lazy_import' object is not callable »).
-# Imported explicitly BEFORE Qt: under Python 3.15, PySide6 6.12's import system
-# breaks the lazy imports of concurrent.futures (“'lazy_import' object is not callable”).
-from concurrent.futures import ThreadPoolExecutor
 import datetime
+import functools
 import getpass
 import glob
-import hashlib
-import hmac
 import importlib.util
 import json
 import locale
@@ -97,28 +91,56 @@ import tempfile
 import threading
 import time
 import traceback
-import http.client  # noqa: F401 — utilisés en interne par urllib : chargés ici exprès, avant Qt
-import ssl          # noqa: F401 — used internally by urllib: deliberately loaded here, before Qt
-import urllib.error
-import urllib.parse
-import urllib.request
 if os.name == "nt":
     import winreg
-# Tous les modules de la bibliothèque standard sont chargés ici, avant Qt (cf. Python 3.15) :
-# aucun import ne doit avoir lieu plus tard, dans une fonction appelée une fois Qt chargé.
-# Every standard-library module is loaded here, before Qt (see Python 3.15):
-# no import may happen later, inside a function called once Qt is loaded.
+else:
+    import pwd
+# Tous les modules de la bibliothèque standard sont chargés avant Qt (cf. Python 3.15, où le système d'import
+# de PySide6 casse certains imports différés) : aucun import ne doit avoir lieu dans une fonction appelée une fois
+# Qt chargé. Les modules réseau (urllib, ssl, hashlib…) sont chargés juste avant Qt pour la fenêtre, et à la
+# demande seulement en mode CLI, qui n'en a besoin que pour --check et --update (voir load_network).
+# Every standard-library module is loaded before Qt (see Python 3.15, where PySide6's import system breaks some
+# deferred imports): no import may happen inside a function called once Qt is loaded. The network modules
+# (urllib, ssl, hashlib…) are loaded just before Qt for the window, and only on demand in CLI mode, which needs
+# them only for --check and --update (see load_network).
+
+
+def load_network():
+    """Modules réseau et d'empreintes (mises à jour). / Network and checksum modules (updates)."""
+    global hashlib, hmac, urllib
+    import hashlib
+    import hmac
+    import http.client  # noqa: F401 — utilisés en interne par urllib / used internally by urllib
+    import ssl          # noqa: F401
+    import urllib.error
+    import urllib.parse
+    import urllib.request
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.4.2"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.3"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-02-d"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-06-a"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
 # What's new, shown in the “What's new in v…” window (most recent first).
 # Add an entry with every new version; only the APP_VERSION one is shown.
 CHANGELOG = {
+    "1.4.3": {
+        "fr": ["Démarrage plus rapide : Fastfetch est lu pendant que l'interface se charge, et la fenêtre s'affiche "
+               "le plus souvent directement avec vos informations.",
+               "Fond acrylique calculé jusqu'à 3 fois plus vite, surtout sur les écrans 4K.",
+               "Résultats des vérifications et des mises à jour affichés dès qu'ils arrivent.",
+               "Windows : la recherche de Fastfetch dans winget n'est plus refaite à chaque démarrage.",
+               "Version en ligne de commande plus légère : les modules réseau ne sont chargés que pour --check "
+               "et --update."],
+        "en": ["Faster startup: Fastfetch is read while the interface loads, and the window usually opens straight "
+               "away with your information.",
+               "Acrylic background computed up to 3 times faster, especially on 4K screens.",
+               "Check and update results shown as soon as they arrive.",
+               "Windows: Fastfetch is no longer looked up in winget at every startup.",
+               "Lighter command-line version: network modules are only loaded for --check and --update."],
+    },
     "1.4.2": {
         "fr": ["Sécurité : les caractères de contrôle sont retirés des informations du système avant l'affichage.",
                "Sécurité : seules les pages github.com sont ouvertes dans le navigateur, et la mise à jour ne peut plus "
@@ -914,6 +936,47 @@ class FFData:
         self.when = datetime.datetime.now()
 
 
+class Job:
+    """Fonction exécutée dans son propre fil, dont on attend ou récupère le résultat plus tard. Plus léger
+    que concurrent.futures (qui charge aussi logging), et un fil « démon » ne retarde pas la fermeture.
+    Function run in its own thread, whose result is waited for or picked up later. Lighter than
+    concurrent.futures (which also loads logging), and a “daemon” thread doesn't delay closing."""
+
+    def __init__(self, fn, *args, daemon=True):
+        self._event, self._lock, self._callbacks = threading.Event(), threading.Lock(), []
+        self._result = self._error = None
+        threading.Thread(target=self._run, args=(fn, args), daemon=daemon).start()
+
+    def _run(self, fn, args):
+        try:
+            self._result = fn(*args)
+        except BaseException as e:   # comme concurrent.futures : renvoyée par result()
+            self._error = e          # like concurrent.futures: raised again by result()
+        with self._lock:
+            self._event.set()
+            callbacks, self._callbacks = self._callbacks, []
+        for cb in callbacks:
+            cb(self)
+
+    def done(self):
+        return self._event.is_set()
+
+    def result(self):
+        self._event.wait()
+        if self._error is not None:
+            raise self._error
+        return self._result
+
+    def add_done_callback(self, cb):
+        """cb(job) une fois la tâche finie (tout de suite si elle l'est déjà), dans le fil qui la termine.
+        cb(job) once the job is finished (right away if it already is), in the thread that finishes it."""
+        with self._lock:
+            if not self._event.is_set():
+                self._callbacks.append(cb)
+                return
+        cb(self)
+
+
 def find_program(name):
     """Comme shutil.which, mais sans jamais regarder le dossier courant : sous Windows, shutil.which le
     fouille en premier, et un « fastfetch.exe » ou « winget.exe » déposé dans le dossier d'où FastVer est
@@ -994,9 +1057,8 @@ def login_shell():
     path = os.environ.get("SHELL") or ""
     if not path:
         try:
-            import pwd
             path = pwd.getpwuid(os.getuid()).pw_shell
-        except (ImportError, KeyError, OSError):
+        except (KeyError, OSError):
             return None
     name = os.path.basename(path)
     if not name or name in ("nologin", "false"):
@@ -1045,43 +1107,45 @@ def fix_self_detection(d):
 
 def load_fastfetch(exe):
     d = FFData()
-    with ThreadPoolExecutor(4) as ex:
-        f_ver = ex.submit(run_ff, exe, ["--version"])
-        f_json = ex.submit(run_ff, exe, ["--format", "json", "--logo", "none", "-s", JSON_STRUCTURE])
-        f_txt = ex.submit(run_ff, exe, ["--logo", "none", "--pipe", "true"])
-        f_logo = ex.submit(run_ff, exe, ["--logo-position", "top", "-s", "break", "--pipe", "false"])
+    # Les quatre lectures tournent en parallèle : la durée totale est celle de la plus longue.
+    # The four reads run in parallel: the total time is that of the longest one.
+    f_json = Job(run_ff, exe, ["--format", "json", "--logo", "none", "-s", JSON_STRUCTURE])
+    f_txt = Job(run_ff, exe, ["--logo", "none", "--pipe", "true"])
+    f_logo = Job(run_ff, exe, ["--logo-position", "top", "-s", "break", "--pipe", "false"])
+    f_ver = Job(run_ff, exe, ["--version"])
 
+    try:
+        d.version = extract_version(f_ver.result())
+    except Exception as e:
+        d.errors.append(f"version : {e}")
+    try:
+        raw = f_logo.result()
+    except Exception:  # anciennes versions : pas de --logo-position
+                       # old versions: no --logo-position
         try:
-            d.version = extract_version(f_ver.result())
+            raw = run_ff(exe, ["-s", "break", "--pipe", "false"])
         except Exception as e:
-            d.errors.append(f"version : {e}")
+            raw = ""
+            d.errors.append(f"logo : {e}")
+    if "\x1bP" in raw or "\x1b_G" in raw:  # logo image (sixel / kitty) → logo ASCII intégré
+                                           # image logo (sixel / kitty) → built-in ASCII logo
         try:
-            for mod in json.loads(f_json.result()):
-                if isinstance(mod, dict) and "result" in mod:
-                    d.modules[str(mod.get("type", "")).lower()] = mod["result"]
-        except Exception as e:
-            d.errors.append(f"JSON : {e}")
-        try:
-            d.title, d.rows = parse_rows(f_txt.result())
-        except Exception as e:
-            d.errors.append(f"texte : {e}")
-        try:
-            raw = f_logo.result()
-        except Exception:  # anciennes versions : pas de --logo-position
-                           # old versions: no --logo-position
-            try:
-                raw = run_ff(exe, ["-s", "break", "--pipe", "false"])
-            except Exception as e:
-                raw = ""
-                d.errors.append(f"logo : {e}")
-        if "\x1bP" in raw or "\x1b_G" in raw:  # logo image (sixel / kitty) → logo ASCII intégré
-                                               # image logo (sixel / kitty) → built-in ASCII logo
-            try:
-                raw = run_ff(exe, ["--logo-type", "builtin", "--logo-position", "top", "-s", "break",
-                                   "--pipe", "false"])
-            except Exception:
-                raw = ""
-        d.logo = parse_ansi(raw)
+            raw = run_ff(exe, ["--logo-type", "builtin", "--logo-position", "top", "-s", "break",
+                               "--pipe", "false"])
+        except Exception:
+            raw = ""
+    d.logo = parse_ansi(raw)   # analysé pendant que les lectures complètes se terminent
+                               # parsed while the full reads are finishing
+    try:
+        for mod in json.loads(f_json.result()):
+            if isinstance(mod, dict) and "result" in mod:
+                d.modules[str(mod.get("type", "")).lower()] = mod["result"]
+    except Exception as e:
+        d.errors.append(f"JSON : {e}")
+    try:
+        d.title, d.rows = parse_rows(f_txt.result())
+    except Exception as e:
+        d.errors.append(f"texte : {e}")
 
     if not d.rows and not d.modules:
         raise RuntimeError(tr("ff_no_data") + "\n" + "\n".join(d.errors))
@@ -1170,10 +1234,22 @@ def command_output(cmd, timeout=2):
         return ""
 
 
+@functools.lru_cache(maxsize=None)
+def gsettings_schema(schema):
+    """Tous les réglages d'un schéma GNOME en un seul appel (lus une fois par lancement).
+    All the settings of a GNOME schema in a single call (read once per launch)."""
+    values = {}
+    for line in command_output(["gsettings", "list-recursively", schema]).splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) == 3 and parts[0] == schema:
+            values[parts[1]] = parts[2].strip()
+    return values
+
+
 def gsettings(schema, key):
     """Valeur d'un réglage GNOME, sans les guillemets (« 'zoom' » → « zoom »).
     Value of a GNOME setting, without the quotes (“'zoom'” → “zoom”)."""
-    return command_output(["gsettings", "get", schema, key]).strip("'")
+    return gsettings_schema(schema).get(key, "").strip("'")
 
 
 def system_is_dark():
@@ -1211,6 +1287,8 @@ def system_accent():
 
 WINGET_NO_UPDATE = 0x8A15002B  # winget : « aucune mise à jour applicable »
                                # winget: “no applicable update”
+WINGET_NOT_FOUND = 0x8A150014  # winget : « aucun paquet installé ne correspond »
+                               # winget: “no installed package found”
 
 
 class UpdateError(Exception):
@@ -1292,27 +1370,32 @@ def _cache_path():
     return os.path.join(config_dir(), "github_cache.json")
 
 
-def github_json(url):
-    """Requête à l'API GitHub avec cache ETag : une réponse « 304 Non modifiée » ne compte pas dans la
-    limite de 60 requêtes par heure, ce qui permet de vérifier à chaque démarrage sans l'atteindre.
-    GitHub API request with an ETag cache: a “304 Not Modified” reply doesn't count against the
-    60-requests-per-hour limit, so checking at every startup doesn't hit it."""
+# Les vérifications de Fastfetch et de FastVer tournent en même temps : le verrou évite qu'elles écrivent le
+# fichier de cache à la fois (fichier abîmé) ou que l'une efface l'entrée que l'autre vient d'ajouter.
+# The Fastfetch and FastVer checks run at the same time: the lock stops them from writing the cache file at
+# once (damaged file) or one from wiping out the entry the other just added.
+_CACHE_LOCK = threading.Lock()
+
+
+def _cache_read():
     try:
         with open(_cache_path(), encoding="utf-8") as f:
             cache = json.load(f)
-        if not isinstance(cache, dict):
-            cache = {}
+        return cache if isinstance(cache, dict) else {}
     except Exception:
-        cache = {}
-    entry = cache.get(url) if isinstance(cache.get(url), dict) else None
-    extra = {"If-None-Match": entry["etag"]} if entry and entry.get("etag") and "body" in entry else None
-    body, headers = _fetch(url, "application/vnd.github+json", 20, 8 * 1024 * 1024, extra)
-    if body is None:
-        return entry["body"]     # inchangé depuis la dernière fois / unchanged since last time
-    data = json.loads(body.decode("utf-8"))
-    etag = headers.get("ETag")
-    if etag:
-        cache[url] = {"etag": etag, "body": data}
+        return {}
+
+
+def cache_get(key):
+    with _CACHE_LOCK:
+        entry = _cache_read().get(key)
+    return entry if isinstance(entry, dict) else None
+
+
+def cache_put(key, entry):
+    with _CACHE_LOCK:
+        cache = _cache_read()   # relu sous le verrou : les entrées des autres sont gardées
+        cache[key] = entry      # re-read under the lock: the others' entries are kept
         try:
             os.makedirs(config_dir(), exist_ok=True)
             tmp = _cache_path() + ".tmp"
@@ -1320,7 +1403,23 @@ def github_json(url):
                 json.dump(cache, f)
             os.replace(tmp, _cache_path())
         except OSError as e:
-            write_log(f"Cache GitHub non enregistré : {e!r}")
+            write_log(f"Cache non enregistré : {e!r}")
+
+
+def github_json(url):
+    """Requête à l'API GitHub avec cache ETag : une réponse « 304 Non modifiée » ne compte pas dans la
+    limite de 60 requêtes par heure, ce qui permet de vérifier à chaque démarrage sans l'atteindre.
+    GitHub API request with an ETag cache: a “304 Not Modified” reply doesn't count against the
+    60-requests-per-hour limit, so checking at every startup doesn't hit it."""
+    entry = cache_get(url)
+    extra = {"If-None-Match": entry["etag"]} if entry and entry.get("etag") and "body" in entry else None
+    body, headers = _fetch(url, "application/vnd.github+json", 20, 8 * 1024 * 1024, extra)
+    if body is None:
+        return entry["body"]     # inchangé depuis la dernière fois / unchanged since last time
+    data = json.loads(body.decode("utf-8"))
+    etag = headers.get("ETag")
+    if etag:
+        cache_put(url, {"etag": etag, "body": data})
     return data
 
 
@@ -1367,16 +1466,36 @@ def ff_install_method(exe):
         if "chocolatey" in p:
             return "choco"
         winget = winget_exe()
-        if winget:
-            try:
-                out = subprocess.run([winget, "list", "--id", FF_WINGET_ID, "-e", "--accept-source-agreements"],
-                                     capture_output=True, text=True, errors="replace", timeout=60,
-                                     stdin=subprocess.DEVNULL, **NO_WINDOW)
-                if out.returncode == 0 and FF_WINGET_ID.lower() in out.stdout.lower():
-                    return "winget"
-            except Exception:
-                pass
-        return "manual"
+        if not winget:
+            return "manual"
+        # « winget list » prend plusieurs secondes : sa réponse est gardée tant que fastfetch.exe ne change pas
+        # (même chemin, taille et date), et au plus une semaine.
+        # “winget list” takes several seconds: its answer is kept as long as fastfetch.exe doesn't change
+        # (same path, size and date), and for a week at most.
+        try:
+            st = os.stat(exe)
+            sig = f"{p}|{st.st_size}|{int(st.st_mtime)}"
+        except OSError:
+            sig = None
+        cached = cache_get("winget_list") if sig else None
+        if cached and cached.get("sig") == sig and time.time() - float(cached.get("when") or 0) < 7 * 86400 \
+                and cached.get("method") in ("winget", "manual"):
+            return cached["method"]
+        method = "manual"
+        try:
+            out = subprocess.run([winget, "list", "--id", FF_WINGET_ID, "-e", "--accept-source-agreements"],
+                                 capture_output=True, text=True, errors="replace", timeout=60,
+                                 stdin=subprocess.DEVNULL, **NO_WINDOW)
+            if out.returncode == 0 and FF_WINGET_ID.lower() in out.stdout.lower():
+                method = "winget"
+            elif out.returncode != 0 and (out.returncode & 0xFFFFFFFF) != WINGET_NOT_FOUND:
+                return method   # autre erreur (winget occupé, sources…) : réponse non gardée
+                                # other error (winget busy, sources…): answer not kept
+        except Exception:
+            return method
+        if sig:
+            cache_put("winget_list", {"sig": sig, "when": time.time(), "method": method})
+        return method
     if any(k in p for k in ("/homebrew/", "/cellar/", "linuxbrew")):
         return "brew"
     if p.startswith(("/usr/", "/bin/", "/nix/", "/run/current-system/", "/snap/")):
@@ -2202,18 +2321,24 @@ def update_state(kind, res):
 
 
 def update_text(kind, st, u):
+    """Phrase d'état d'une mise à jour (Réglages et CLI), ou "" pour un état sans texte (« idle »…).
+    Status sentence of an update (Settings and CLI), or "" for a state without text (“idle”…)."""
     key = {"updated": "st_updated_restart" if kind == "app" else "st_updated"}.get(st, f"st_{st}")
     if st == "available" and u.get("action") == "hint":
         key = "st_hint"
     elif st == "available" and u.get("action") == "page":
         key = "st_no_checksum" if kind == "app" and u.get("no_checksum") else \
             ("st_page" if kind == "fastfetch" else "st_page_app")
+    if key not in STRINGS["fr"]:
+        return ""
     return tr(key, latest=u.get("latest") or "", repo=UPDATE_REPO, msg=u.get("msg", ""), cmd=u.get("hint"))
 
 
 def cli_updates(args, paint, accent):
     """--check et --update : même logique que la page Réglages de la fenêtre.
     --check and --update: same logic as the window's Settings page."""
+    load_network()   # mode CLI : Qt n'est jamais chargé, l'import tardif est sans risque
+                     # CLI mode: Qt is never loaded, so a late import is safe
     kinds = ["fastfetch", "app"]
     if args.update == "fastfetch":
         kinds = ["fastfetch"]
@@ -2365,11 +2490,58 @@ if __name__ == "__main__" and cli_requested(sys.argv):
         sys.exit(1)
 
 
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(prog="fastver", description=tr("cli_desc"))
+    p.add_argument("--demo", action="store_true", help=tr("cli_demo"))
+    p.add_argument("--theme", choices=("auto", "light", "dark"), default="auto", help=tr("cli_theme"))
+    p.add_argument("--accent", default="logo", help=tr("cli_accent"))
+    p.add_argument("--version", action="version", version=f"FastVer {APP_VERSION} (build {BUILD})")
+    p.add_argument("--expand", action="store_true", help=tr("cli_expand"))
+    p.add_argument("--backdrop", choices=("acrylic", "solid"), default=None, help=tr("cli_backdrop"))
+    p.add_argument("--mica", dest="backdrop", action="store_const", const="acrylic", help=argparse.SUPPRESS)
+    p.add_argument("--wallpaper", metavar="IMAGE", help=tr("cli_wallpaper"))
+    p.add_argument("--fastfetch", metavar="PATH", help=tr("cli_fastfetch"))
+    p.add_argument("--lang", choices=("auto", "fr", "en"), default=None, help=tr("cli_lang"))
+    p.add_argument("--cli", action="store_true", help=tr("cli_cli"))   # traité avant Qt / handled before Qt
+    p.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)  # contrôle automatique (CI)
+                                                                              # automatic check (CI)
+    args = p.parse_args(argv)
+    if args.selftest:
+        args.demo = True
+    return args
+
+
+def early_start(argv=None):
+    """Lancement de la fenêtre, avant même le chargement de Qt : lit les options (--help et --version répondent
+    sans attendre Qt) et lance la lecture de Fastfetch, qui se fait ainsi pendant que Qt se charge et que la
+    fenêtre se construit. Renvoie (options, (chemin de Fastfetch, tâche) ou None).
+    Window launch, before Qt is even loaded: reads the options (--help and --version answer without waiting
+    for Qt) and starts reading Fastfetch, which thus happens while Qt loads and the window is built.
+    Returns (options, (Fastfetch path, job) or None)."""
+    args = parse_args(argv)
+    if args.lang:
+        set_language(args.lang)  # pour cette session seulement (non enregistré)
+                                 # for this session only (not saved)
+    exe = None if args.demo else find_fastfetch(args.fastfetch)
+    return args, ((exe, Job(load_fastfetch, exe)) if exe else None)
+
+
+EARLY = early_start() if __name__ == "__main__" else None
+load_network()   # avant Qt (cf. Python 3.15) / before Qt (see Python 3.15)
+
 try:
-    from PySide6.QtCore import QEvent, QLockFile, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QUrl
+    # QFluentWidgets essaie de charger numpy, scipy, Pillow et colorthief pour son AcrylicLabel, inutile ici
+    # (FastVer dessine son propre acrylique) : sans cette ligne, numpy seul coûte ~70 ms au démarrage s'il est
+    # installé. Le module est marqué absent ; QFluentWidgets prévoit ce cas et continue sans lui.
+    # QFluentWidgets tries to load numpy, scipy, Pillow and colorthief for its AcrylicLabel, useless here
+    # (FastVer draws its own acrylic): without this line, numpy alone costs ~70 ms at startup if installed.
+    # The module is marked as missing; QFluentWidgets handles that case and carries on without it.
+    sys.modules.setdefault("qfluentwidgets.common.image_utils", None)
+    from PySide6.QtCore import (QEvent, QLockFile, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer,
+                                QUrl, Signal, Slot)
     from PySide6.QtGui import (QBrush, QColor, QDesktopServices, QFont, QFontMetricsF, QGuiApplication,
-                               QIcon, QImage, QKeySequence, QPainter, QPainterPath, QPixmap, QRadialGradient,
-                               QShortcut)
+                               QIcon, QImage, QImageReader, QKeySequence, QPainter, QPainterPath, QPixmap,
+                               QRadialGradient, QShortcut)
     from PySide6.QtWidgets import (QApplication, QFrame, QGraphicsBlurEffect, QGraphicsPixmapItem,
                                    QGraphicsScene, QGridLayout, QHBoxLayout, QLabel,
                                    QVBoxLayout, QWidget)
@@ -2524,14 +2696,19 @@ class AcrylicMaterial:
     GRAIN = 7                   # opacité du grain (0-255)
                                 # grain opacity (0-255)
 
+    SCALE = 4                   # tout le matériau est calculé au quart de la résolution de l'écran (il est flou),
+                                # puis agrandi une seule fois ; seul le grain est posé à pleine résolution
+                                # the whole material is computed at a quarter of the screen resolution (it is
+                                # blurred), then enlarged once; only the grain is laid at full resolution
+
     def __init__(self, wallpaper=None):
         self.cache, self.captures = {}, {}
         # Une image donnée avec --wallpaper remplit l'écran ; sinon, on reprend la disposition du bureau.
         # An image given with --wallpaper fills the screen; otherwise, use the desktop's layout.
         self.layout = ("fill", None) if wallpaper else wallpaper_layout()
         path = wallpaper or wallpaper_path()
-        img = QImage(path) if path else QImage()
-        self.wallpaper = None if img.isNull() else img
+        img = self._load_reduced(path) if path else QImage()
+        self.wallpaper = None if img.isNull() else img   # au quart de sa taille / at a quarter of its size
         if self.wallpaper is None:
             for scr in QGuiApplication.screens():  # avant l'affichage : FastVer n'est pas encore visible
                                                    # before showing: FastVer isn't visible yet
@@ -2544,18 +2721,39 @@ class AcrylicMaterial:
     def ok(self):
         return self.wallpaper is not None or bool(self.captures)
 
+    @classmethod
+    def _load_reduced(cls, path):
+        """Le fond d'écran décodé directement au quart de sa taille : un JPEG est alors lu 4 à 8 fois plus vite,
+        et les dispositions « centrer » et « mosaïque » restent exactes à cette échelle.
+        The wallpaper decoded straight at a quarter of its size: a JPEG is then read 4 to 8 times faster,
+        and the “center” and “tile” layouts stay exact at that scale."""
+        reader = QImageReader(path)
+        size = reader.size()
+        if size.isValid() and size.width() >= cls.SCALE and size.height() >= cls.SCALE:
+            reader.setScaledSize(QSize(max(1, round(size.width() / cls.SCALE)),
+                                       max(1, round(size.height() / cls.SCALE))))
+        img = reader.read()
+        if img.isNull() and size.isValid():   # décodage réduit refusé par ce format : lecture complète
+            img = QImage(path)                # reduced decoding refused by this format: full read
+            if not img.isNull():
+                img = img.scaled(max(1, img.width() // cls.SCALE), max(1, img.height() // cls.SCALE),
+                                 Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        return img
+
     def _grain_tile(self, n=96):
         # Pixels gris aléatoires (toujours les mêmes), construits d'un bloc plutôt que pixel par pixel.
         # Random grey pixels (always the same ones), built in one go rather than pixel by pixel.
-        a = self.GRAIN
-        buf = b"".join(bytes((v, v, v, a)) for v in random.Random(64).randbytes(n * n))  # BGRA
-        tile = QImage(buf, n, n, n * 4, QImage.Format.Format_ARGB32).copy()  # copie : buf est temporaire
-                                                                            # copy: buf is temporary
+        noise = random.Random(64).randbytes(n * n)
+        buf = bytearray(n * n * 4)                          # BGRA
+        buf[0::4] = buf[1::4] = buf[2::4] = noise
+        buf[3::4] = bytes((self.GRAIN,)) * (n * n)
+        tile = QImage(bytes(buf), n, n, n * 4, QImage.Format.Format_ARGB32).copy()  # copie : buf est temporaire
+                                                                                   # copy: buf is temporary
         return QPixmap.fromImage(tile)
 
-    def _blur(self, img):
-        w, h = max(1, img.width() // 4), max(1, img.height() // 4)
-        small = img.scaled(w, h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    def _blur(self, small):
+        """Flou de l'image (déjà au quart de la taille de l'écran). / Blur of the image (already quarter-size)."""
+        w, h = small.width(), small.height()
         r = self.BLUR_RADIUS
         m = r * 2
         canvas = QImage(w + 2 * m, h + 2 * m, QImage.Format.Format_ARGB32_Premultiplied)
@@ -2577,8 +2775,7 @@ class AcrylicMaterial:
         p = QPainter(out)
         scene.render(p, QRectF(out.rect()), QRectF(0, 0, canvas.width(), canvas.height()))
         p.end()
-        return out.copy(m, m, w, h).scaled(img.width(), img.height(), Qt.AspectRatioMode.IgnoreAspectRatio,
-                                           Qt.TransformationMode.SmoothTransformation)
+        return out.copy(m, m, w, h)
 
     @staticmethod
     def _place(src, W, H, style, color):
@@ -2604,18 +2801,20 @@ class AcrylicMaterial:
         p.end()
         return out
 
-    def _desktop_image(self, screen, W, H):
+    def _desktop_image(self, screen, w, h):
+        """Fond d'écran disposé comme sur le bureau, au quart de la taille de l'écran (w × h).
+        Wallpaper laid out as on the desktop, at a quarter of the screen size (w × h)."""
         style, color = self.layout
         if style != "span":
-            return self._place(self.wallpaper, W, H, style, color)
+            return self._place(self.wallpaper, w, h, style, color)
         # « Étendre » : une seule image couvre tous les écrans ; on en découpe la part de cet écran.
         # “Span”: a single image covers every screen; cut out this screen's share.
-        dpr = screen.devicePixelRatio()
+        f = screen.devicePixelRatio() / self.SCALE
         virt = screen.virtualGeometry()
-        full = self._place(self.wallpaper, max(1, round(virt.width() * dpr)), max(1, round(virt.height() * dpr)),
+        full = self._place(self.wallpaper, max(1, round(virt.width() * f)), max(1, round(virt.height() * f)),
                            "fill", color)
         geo = screen.geometry()
-        return full.copy(round((geo.x() - virt.x()) * dpr), round((geo.y() - virt.y()) * dpr), W, H)
+        return full.copy(round((geo.x() - virt.x()) * f), round((geo.y() - virt.y()) * f), w, h)
 
     def pixmap(self, screen, dark):
         """Matériau pour tout l'écran `screen` (mis en cache par écran et par thème).
@@ -2625,15 +2824,20 @@ class AcrylicMaterial:
         if key in self.cache:
             return self.cache[key]
         W, H = max(1, round(geo.width() * dpr)), max(1, round(geo.height() * dpr))
+        w, h = max(1, W // self.SCALE), max(1, H // self.SCALE)
         if self.wallpaper is None:
             src = self.captures.get(screen.name()) or next(iter(self.captures.values()))
-            img = self._place(src, W, H, "fill", None)
+            img = self._place(src, w, h, "fill", None)
         else:
-            img = self._desktop_image(screen, W, H)
+            img = self._desktop_image(screen, w, h)
         blurred = self._blur(img)
 
-        out = QImage(W, H, QImage.Format.Format_RGB32)
-        p = QPainter(out)
+        # Désaturation et teinte au quart de la taille (le résultat est le même : tout est flou), puis un seul
+        # agrandissement ; le grain fin est ajouté à pleine résolution.
+        # Desaturation and tint at a quarter of the size (same result: everything is blurred), then a single
+        # enlargement; the fine grain is added at full resolution.
+        small = QImage(w, h, QImage.Format.Format_RGB32)
+        p = QPainter(small)
         p.drawImage(0, 0, blurred)
         p.setOpacity(1.0 - self.SATURATION)
         p.drawImage(0, 0, blurred.convertToFormat(QImage.Format.Format_Grayscale8))
@@ -2641,12 +2845,69 @@ class AcrylicMaterial:
         color, alpha = self.DARK if dark else self.LIGHT
         tint = QColor(color)
         tint.setAlphaF(alpha)
-        p.fillRect(out.rect(), tint)
+        p.fillRect(small.rect(), tint)
+        p.end()
+        out = small.scaled(W, H, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        p = QPainter(out)
         p.fillRect(out.rect(), QBrush(self.grain))
         p.end()
         pm = QPixmap.fromImage(out)
         self.cache[key] = pm
         return pm
+
+
+class Relay(QObject):
+    """Passe une fonction au fil de l'interface depuis n'importe quel fil : la fin d'une tâche est traitée dès
+    qu'elle arrive, au lieu d'être guettée toutes les 60 à 100 ms.
+    Hands a function over to the UI thread from any thread: a finished job is handled as soon as it arrives,
+    instead of being polled for every 60 to 100 ms."""
+    call = Signal(object)
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.call.connect(self._run, Qt.ConnectionType.QueuedConnection)  # toujours différé, même depuis l'interface
+                                                                          # always deferred, even from the UI thread
+
+    @Slot(object)
+    def _run(self, fn):
+        fn()
+
+    def post(self, fn):
+        try:
+            self.call.emit(fn)
+        except RuntimeError:   # fenêtre déjà détruite / window already destroyed
+            pass
+
+
+class ResizeWatcher(QObject):
+    """Appelle `fn` quand le widget observé change de taille (sans filtrer tous les évènements de la fenêtre).
+    Calls `fn` when the watched widget is resized (without filtering every event of the window)."""
+
+    def __init__(self, widget, fn):
+        super().__init__(widget)
+        self.fn = fn
+        widget.installEventFilter(self)
+
+    def eventFilter(self, obj, e):
+        if e.type() == QEvent.Type.Resize:
+            self.fn()
+        return False
+
+
+class SpecsCard(ExpandGroupSettingCard):
+    """Expander des spécifications, dont les lignes sont ajoutées d'un bloc : la carte d'origine remesure toutes
+    ses lignes à chaque ajout (une vingtaine de lignes → plus de 300 mesures au lieu d'une vingtaine).
+    Specifications expander whose rows are added in one go: the original card re-measures all its rows on every
+    add (a score of rows → over 300 measurements instead of a score)."""
+
+    def add_rows(self, widgets):
+        self._adjustViewSize = lambda: None   # une seule mesure, à la fin / a single measurement, at the end
+        try:
+            for w in widgets:
+                self.addGroupWidget(w)
+        finally:
+            del self._adjustViewSize
+        self._adjustViewSize()
 
 
 def text_color(alpha=1.0):
@@ -2766,13 +3027,14 @@ class LogoWidget(QWidget):
 
     def color_for(self, fg, xpos, dark):
         key = (fg, dark)
-        if key not in self._colors:
-            self._colors[key] = self._base_color(fg, dark)
-        base = self._colors[key]
+        cached = self._colors.get(key)
+        if cached is None:   # (couleur, QColor prête, teinte) calculées une fois / computed once
+            base = self._base_color(fg, dark)
+            cached = self._colors[key] = (base, QColor(base), to_hls(base)[0])
+        base, qcolor, hue = cached
         if self.fade <= 0:
-            return QColor(base)
-        h, _, _ = to_hls(base)
-        wave = from_hls(h + self.phase + xpos * 0.6, 0.66 if dark else 0.45, 0.85)
+            return qcolor
+        wave = from_hls(hue + self.phase + xpos * 0.6, 0.66 if dark else 0.45, 0.85)
         return QColor(mix(base, wave, self.fade))
 
     def paintEvent(self, e):
@@ -2950,14 +3212,14 @@ class FastVerWindow(FramelessWindow):
     page = "main"
     _fit_pending = False
 
-    def __init__(self, args):
+    def __init__(self, args, prefetch=None):
         super().__init__()
         self.args = args
         self.data, self.error, self.expanded = None, None, args.expand
-        self._executor = ThreadPoolExecutor(1)       # lecture de Fastfetch
-                                                     # reading Fastfetch
-        self._bg = ThreadPoolExecutor(2)             # mises à jour
-                                                     # updates
+        self._relay = Relay(self)
+        # Lecture de Fastfetch lancée avant Qt (early_start) : (chemin, tâche), reprise par le premier refresh().
+        # Fastfetch read started before Qt (early_start): (path, job), picked up by the first refresh().
+        self._prefetch = prefetch
         self._future, self._centered, self._auto_started = None, False, False
         self.ff_exe = None   # chemin de Fastfetch, relu à chaque actualisation / Fastfetch path, re-read on refresh
         self.upd = {"fastfetch": {"state": "idle"}, "app": {"state": "idle"}}
@@ -3073,11 +3335,6 @@ class FastVerWindow(FramelessWindow):
 
     # ── Cycle de vie ──────────────────────────────────────────────────────
     # ── Lifecycle ─────────────────────────────────────────────────────────
-    def closeEvent(self, e):
-        self._executor.shutdown(wait=False)
-        self._bg.shutdown(wait=False)
-        super().closeEvent(e)
-
     def on_escape(self):
         if self.page == "settings":
             self.close_settings()
@@ -3097,22 +3354,23 @@ class FastVerWindow(FramelessWindow):
         self.page = "main"
         self.show_loading()
         self.ff_exe = exe = find_fastfetch(self.args.fastfetch)
+        early, self._prefetch = self._prefetch, None
         if self.args.demo:
-            self._future = self._executor.submit(demo_data)
+            job = Job(demo_data)
         elif not exe:
             self.data, self.error = None, ("ff_missing", "")
             QTimer.singleShot(350, self._loaded)
             return
         else:
-            self._future = self._executor.submit(load_fastfetch, exe)
-        QTimer.singleShot(60, self._poll)
+            job = early[1] if early and early[0] == exe else Job(load_fastfetch, exe)
+        self._future = job
+        job.add_done_callback(lambda j: self._relay.post(lambda: self._on_data(j)))
 
-    def _poll(self):
-        if not self._future.done():
-            QTimer.singleShot(60, self._poll)
+    def _on_data(self, job):
+        if job is not self._future or not isValid(self):
             return
         try:
-            self.data, self.error = self._future.result(), None
+            self.data, self.error = job.result(), None
         except Exception as e:
             self.data, self.error = None, ("ff_failed", str(e).strip() or e.__class__.__name__)
         self._loaded()
@@ -3165,11 +3423,10 @@ class FastVerWindow(FramelessWindow):
         elif self.y() + h > screen.bottom():
             self.move(self.x(), max(screen.y(), screen.bottom() - h))
 
-    def eventFilter(self, obj, e):
-        if e.type() == QEvent.Type.Resize and obj is self.card and not self._fit_pending:
+    def _card_resized(self):
+        if not self._fit_pending:
             self._fit_pending = True
             QTimer.singleShot(0, self.fit_height)
-        return super().eventFilter(obj, e)
 
     # ── Briques de mise en page ───────────────────────────────────────────
     # ── Layout building blocks ────────────────────────────────────────────
@@ -3308,9 +3565,13 @@ class FastVerWindow(FramelessWindow):
             light = QFontMetricsF(qfont(TITLE_FAMILIES, px, QFont.Weight.Light))
             return bold.horizontalAdvance(inf["first"]) + light.horizontalAdvance(" " + inf["rest"])
 
-        # Plus grande taille (34 → 20 px) qui tient sur une ligne ; sinon le nom passe sur deux lignes.
-        # Largest size (34 → 20 px) that fits on one line; otherwise the name wraps onto two lines.
-        size = next((px for px in range(34, 20, -1) if wordmark_width(px) <= avail), 20)
+        # Plus grande taille (34 → 20 px) qui tient sur une ligne ; sinon le nom passe sur deux lignes. La largeur
+        # est presque proportionnelle à la taille : on part de l'estimation au lieu d'essayer chaque taille.
+        # Largest size (34 → 20 px) that fits on one line; otherwise the name wraps onto two lines. The width is
+        # nearly proportional to the size: start from the estimate instead of trying every size.
+        w34 = wordmark_width(34)
+        start = 34 if w34 <= avail else min(33, int(34 * avail / max(1.0, w34)) + 1)
+        size = next((px for px in range(start, 20, -1) if wordmark_width(px) <= avail), 20)
         split = wordmark_width(size) > avail
         fam = ",".join(f"'{f}'" for f in TITLE_FAMILIES)
         mark = QLabel(c)
@@ -3396,17 +3657,15 @@ class FastVerWindow(FramelessWindow):
         # Expander « Spécifications de l'appareil »
         # “Device specifications” expander
         rows = self.rows = spec_rows(d, inf)
-        self.card = ExpandGroupSettingCard(FIF.DEVELOPER_TOOLS, tr("specs_title"),
-                                           tr("specs_sub", n=len(rows)), c)
-        copy_btn = PushButton(tr("copy"), self.card)
+        card = self.card = SpecsCard(FIF.DEVELOPER_TOOLS, tr("specs_title"), tr("specs_sub", n=len(rows)), c)
+        copy_btn = PushButton(tr("copy"), card)
         copy_btn.setIcon(FIF.COPY)
         copy_btn.clicked.connect(self.copy_all)
-        self.card.addWidget(copy_btn)
-        for key, orig, value, pct in rows:
-            kind = "battery" if orig.startswith("Battery") else "usage"
-            self.card.addGroupWidget(SpecRow(key, value, pct, kind, self.copy, self.card.view))
-        self.card.installEventFilter(self)
-        lay.addWidget(self.card)
+        card.addWidget(copy_btn)
+        card.add_rows([SpecRow(key, value, pct, "battery" if orig.startswith("Battery") else "usage",
+                               self.copy, card.view) for key, orig, value, pct in rows])
+        ResizeWatcher(card, self._card_resized)
+        lay.addWidget(card)
         lay.addStretch(1)
         if self.expanded:
             self.card.setExpand(True)
@@ -3618,24 +3877,22 @@ class FastVerWindow(FramelessWindow):
     def run_bg(self, fn, done):
         """Exécute fn en arrière-plan puis done(résultat, erreur) dans le fil de l'interface.
         Runs fn in the background, then done(result, error) on the UI thread."""
-        fut = self._bg.submit(fn)
-
-        def poll():
-            if not fut.done():
-                QTimer.singleShot(100, poll)
-                return
+        def finished(job):
             try:
-                res, err = fut.result(), None
+                res, err = job.result(), None
             except Exception as e:
                 res, err = None, e
                 write_log(f"Tâche d'arrière-plan en échec : {e!r}")
-            done(res, err)
+            if isValid(self):
+                done(res, err)
 
-        QTimer.singleShot(100, poll)
+        # Fil non « démon » : une mise à jour en cours va jusqu'au bout même si la fenêtre se ferme.
+        # Non-“daemon” thread: an update in progress runs to the end even if the window closes.
+        Job(fn, daemon=False).add_done_callback(lambda j: self._relay.post(lambda: finished(j)))
 
     def _update_texts(self, kind):
         u = self.upd[kind]
-        st, latest = u.get("state", "idle"), u.get("latest") or ""
+        st = u.get("state", "idle")
         if kind == "fastfetch":
             local = u.get("local") or (self.data.version if self.data and not self.data.demo else "")
             if not self.ff_exe:
@@ -3646,15 +3903,7 @@ class FastVerWindow(FramelessWindow):
                     title += " · " + tr(f"method_{u['method']}")
         else:
             title = f"{APP_NAME} {APP_VERSION}"
-        key = {"updated": "st_updated_restart" if kind == "app" else "st_updated"}.get(st, f"st_{st}")
-        if st == "available" and u.get("action") == "hint":
-            key = "st_hint"
-        elif st == "available" and u.get("action") == "page":
-            key = "st_no_checksum" if kind == "app" and u.get("no_checksum") else \
-                ("st_page" if kind == "fastfetch" else "st_page_app")
-        if key not in STRINGS["fr"]:
-            return title, ""
-        return title, tr(key, latest=latest, repo=UPDATE_REPO, msg=u.get("msg", ""), cmd=u.get("hint"))
+        return title, update_text(kind, st, u)
 
     def _sync_update_ui(self, kind):
         w = self.ui.get(kind)
@@ -3706,18 +3955,7 @@ class FastVerWindow(FramelessWindow):
             return  # au démarrage, un échec (hors ligne…) reste discret : il est dans le journal
                     # at startup, a failure (offline…) stays quiet: it's in the log
         u.update(res)
-        latest, local = res["latest"], (res["local"] if kind == "fastfetch" else APP_VERSION)
-        if kind == "fastfetch" and not local:
-            state = "missing"
-        elif latest is None:
-            state = "norelease"
-        elif is_newer(latest, local):
-            state = "available"
-        elif is_newer(local, latest):
-            state = "dev"
-        else:
-            state = "uptodate"
-        u["state"] = state
+        u["state"] = state = update_state(kind, res)
         self._sync_update_ui(kind)
         if auto and state == "available":
             if u.get("action") == "update":
@@ -3826,27 +4064,6 @@ def html_escape(s):
 
 # ════════════════════════════════════════════════════════════════════════════
 
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(prog="fastver", description=tr("cli_desc"))
-    p.add_argument("--demo", action="store_true", help=tr("cli_demo"))
-    p.add_argument("--theme", choices=("auto", "light", "dark"), default="auto", help=tr("cli_theme"))
-    p.add_argument("--accent", default="logo", help=tr("cli_accent"))
-    p.add_argument("--version", action="version", version=f"FastVer {APP_VERSION} (build {BUILD})")
-    p.add_argument("--expand", action="store_true", help=tr("cli_expand"))
-    p.add_argument("--backdrop", choices=("acrylic", "solid"), default=None, help=tr("cli_backdrop"))
-    p.add_argument("--mica", dest="backdrop", action="store_const", const="acrylic", help=argparse.SUPPRESS)
-    p.add_argument("--wallpaper", metavar="IMAGE", help=tr("cli_wallpaper"))
-    p.add_argument("--fastfetch", metavar="PATH", help=tr("cli_fastfetch"))
-    p.add_argument("--lang", choices=("auto", "fr", "en"), default=None, help=tr("cli_lang"))
-    p.add_argument("--cli", action="store_true", help=tr("cli_cli"))   # traité avant Qt / handled before Qt
-    p.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)  # contrôle automatique (CI)
-                                                                              # automatic check (CI)
-    args = p.parse_args(argv)
-    if args.selftest:
-        args.demo = True
-    return args
-
-
 def bring_to_front(pid):
     """Met au premier plan la fenêtre de l'instance déjà ouverte (Windows).
     Brings the already-open instance's window to the front (Windows)."""
@@ -3942,10 +4159,7 @@ def run_selftest(app, win):
 
 
 def main(argv=None):
-    args = parse_args(argv)
-    if args.lang:
-        set_language(args.lang)  # pour cette session seulement (non enregistré)
-                                 # for this session only (not saved)
+    args, prefetch = EARLY if (argv is None and EARLY) else early_start(argv)
     write_log(f"FastVer {APP_VERSION} build {BUILD} — {APP_PATH} — Python {platform.python_version()}")
     if sys.platform.startswith("linux") and not os.environ.get("QT_QPA_PLATFORM"):
         # X11 (ou XWayland) d'abord : la fenêtre sans bordure et l'acrylique ont besoin de connaître la position
@@ -3960,7 +4174,7 @@ def main(argv=None):
     lock = True if args.selftest else acquire_instance_lock()
     if lock is None:
         return 0
-    win = FastVerWindow(args)
+    win = FastVerWindow(args, prefetch)
     win.show()
     if args.selftest:
         run_selftest(app, win)
