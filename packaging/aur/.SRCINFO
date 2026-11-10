@@ -22,10 +22,10 @@ pkgbase = fastver-bin
 	optdepends = fastfetch: system information shown by FastVer
 	provides = fastver
 	conflicts = fastver
+	noextract = FastVer-1.4.3-x86_64.AppImage
 	options = !strip
 	options = !debug
 	source = FastVer-1.4.3-x86_64.AppImage::https://github.com/Bulls64/FastVer/releases/download/v1.4.3/FastVer-x86_64.AppImage
-	noextract = FastVer-1.4.3-x86_64.AppImage
 	sha256sums = ab7e21ce9c99b0b89bb27837e03a4c5b96753c319699dadbc7c39e3de4381bd8
 
 pkgname = fastver-bin

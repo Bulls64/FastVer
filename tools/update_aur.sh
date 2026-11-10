@@ -40,9 +40,9 @@ sed -i -e "s/^pkgver=.*/pkgver=$VERSION/" -e "s/^pkgrel=.*/pkgrel=1/" \
     for d in "${optdepends[@]}"; do echo "	optdepends = $d"; done
     for d in "${provides[@]}"; do echo "	provides = $d"; done
     for d in "${conflicts[@]}"; do echo "	conflicts = $d"; done
+    for s in "${noextract[@]}"; do echo "	noextract = $s"; done
     for o in "${options[@]}"; do echo "	options = $o"; done
     for s in "${source[@]}"; do echo "	source = $s"; done
-    for s in "${noextract[@]}"; do echo "	noextract = $s"; done
     for s in "${sha256sums[@]}"; do echo "	sha256sums = $s"; done
     echo
     echo "pkgname = $pkgname"
