@@ -1,6 +1,6 @@
-# Compile FastVer.exe et FastVer-cli.exe (Windows) et FastVer-x86_64.AppImage (Linux), les vérifie, calcule les
+# Compile FastVer.exe et FastVer-cli.exe (Windows), FastVer-x86_64.AppImage et le paquet .deb (Linux), les vérifie, calcule les
 # empreintes SHA-256 et publie la release.
-# Builds FastVer.exe and FastVer-cli.exe (Windows) and FastVer-x86_64.AppImage (Linux), checks them, computes the
+# Builds FastVer.exe and FastVer-cli.exe (Windows), FastVer-x86_64.AppImage and the .deb package (Linux), checks them, computes the
 # SHA-256 checksums and publishes the release.
 #
 # Publier une version / publish a version :
@@ -139,10 +139,27 @@ jobs:
           release/FastVer-x86_64.AppImage --cli --demo --specs --no-color
           release/FastVer-x86_64.AppImage --cli --demo --json | python -c "import json, sys; assert json.load(sys.stdin)['os']['host'] == 'PC-DEMO'"
 
+      # Paquet .deb fait du même dossier PyInstaller que l'AppImage, puis installé et testé sur le runner.
+      # .deb package made from the same PyInstaller folder as the AppImage, then installed and tested on the runner.
+      - name: Paquet .deb / .deb package
+        run: bash tools/build_deb.sh
+
+      - name: Test du paquet .deb / .deb package test
+        timeout-minutes: 5
+        run: |
+          sudo apt-get install -y ./release/fastver_*_amd64.deb
+          fastver --version
+          fastver-cli --demo --specs --no-color
+          xvfb-run -a fastver --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
+          sudo apt-get purge -y fastver
+          test ! -e /usr/lib/fastver
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
           name: linux
-          path: release/FastVer-x86_64.AppImage
+          path: |
+            release/FastVer-x86_64.AppImage
+            release/fastver_*_amd64.deb
 
   release:
     needs: [windows, linux]
@@ -162,9 +179,9 @@ jobs:
         run: |
           mkdir release
           cp artifacts/windows/FastVer.exe artifacts/windows/FastVer-cli.exe artifacts/linux/FastVer-x86_64.AppImage \
-            fastver.py release/
+            artifacts/linux/fastver_*_amd64.deb fastver.py release/
           cd release
-          for f in FastVer.exe FastVer-cli.exe FastVer-x86_64.AppImage fastver.py; do
+          for f in FastVer.exe FastVer-cli.exe FastVer-x86_64.AppImage fastver_*_amd64.deb fastver.py; do
             sha256sum "$f" > "$f.sha256"
           done
           cat *.sha256 > SHA256SUMS
@@ -189,6 +206,7 @@ jobs:
             release/FastVer.exe
             release/FastVer-cli.exe
             release/FastVer-x86_64.AppImage
+            release/fastver_*_amd64.deb
             release/fastver.py
 
       - name: Publier la release / publish the release
