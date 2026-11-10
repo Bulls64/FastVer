@@ -1,0 +1,175 @@
+# Ajoute les paquets .deb et .rpm à une release déjà publiée, sans toucher à ses autres fichiers.
+# Les paquets sont faits de l'AppImage de cette release (vérifiée par son empreinte) : ils contiennent
+# exactement le même programme. Ils sont testés, attestés, puis ajoutés avec leurs .sha256, et SHA256SUMS
+# et les notes de la release sont complétés.
+# Adds the .deb and .rpm packages to an already published release, without touching its other files.
+# The packages are made from that release's AppImage (checked against its checksum): they hold exactly the
+# same program. They are tested, attested, then added with their .sha256, and the release's SHA256SUMS and
+# notes are completed.
+#
+# Lancement / run: Actions → « Paquets pour une release publiée » → Run workflow → tag (ex. v1.4.3).
+name: Paquets pour une release publiée / packages for a published release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de la release publiée / published release tag (ex. v1.4.3)"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+
+      - name: Contrôles / checks
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag invalide : $TAG"; exit 1; }
+          v=$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' fastver.py)
+          [ "v$v" = "$TAG" ] || { echo "APP_VERSION = $v dans fastver.py, différent de $TAG"; exit 1; }
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' | grep -qx false
+
+      - name: AppImage publiée / published AppImage
+        run: |
+          mkdir pub && cd pub
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p FastVer-x86_64.AppImage -p SHA256SUMS -p fastver.py
+          grep '  FastVer-x86_64.AppImage$' SHA256SUMS | sha256sum -c -
+          grep '  fastver.py$' SHA256SUMS | sha256sum -c -
+          # Même empreinte que celle calculée par GitHub à la publication / same digest as GitHub's at publication
+          digest=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets[] | select(.name == "FastVer-x86_64.AppImage") | .digest')
+          [ "$digest" = "sha256:$(sha256sum FastVer-x86_64.AppImage | cut -c1-64)" ]
+          # Les fichiers du paquet (bureau, icône) viennent de ce commit : le programme doit être celui publié.
+          # The package files (desktop entry, icon) come from this commit: the program must be the published one.
+          cmp fastver.py ../fastver.py
+          chmod +x FastVer-x86_64.AppImage
+          ./FastVer-x86_64.AppImage --appimage-extract >/dev/null
+
+      - name: Paquets / packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm xvfb
+          BUNDLE=$PWD/pub/squashfs-root/usr/lib/fastver bash tools/build_deb.sh
+          BUNDLE=$PWD/pub/squashfs-root/usr/lib/fastver bash tools/build_rpm.sh
+
+      - name: Test du paquet .deb / .deb package test
+        timeout-minutes: 5
+        run: |
+          sudo apt-get install -y ./release/fastver_*_amd64.deb
+          fastver --version | grep -F "FastVer ${TAG#v} "
+          fastver-cli --demo --specs --no-color
+          xvfb-run -a fastver --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
+          sudo apt-get purge -y fastver
+          test ! -e /usr/lib/fastver
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: packages
+          path: |
+            release/fastver_*_amd64.deb
+            release/fastver-*.x86_64.rpm
+
+  rpm:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: fedora:latest
+            install: dnf install -y
+            extra: xorg-x11-server-Xvfb dejavu-sans-fonts
+          - image: rockylinux/rockylinux:9
+            install: dnf install -y
+            extra: xorg-x11-server-Xvfb dejavu-sans-fonts
+          - image: opensuse/tumbleweed
+            install: zypper -n install --allow-unsigned-rpm
+            extra: xorg-x11-server-Xvfb dejavu-fonts
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
+        with:
+          name: packages
+          path: artifacts
+
+      - name: Installation et test / install and test
+        shell: bash
+        run: |
+          ${{ matrix.install }} ./artifacts/fastver-*.x86_64.rpm ${{ matrix.extra }}
+          rpm -V fastver
+          fastver --version | grep -F "FastVer ${TAG#v} "
+          fastver-cli --demo --specs --no-color
+          Xvfb :99 -screen 0 1280x800x24 & sleep 2
+          DISPLAY=:99 timeout 120 fastver --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
+          rpm -e fastver
+          test ! -e /usr/lib/fastver
+
+  attach:
+    needs: [build, rpm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # modifier la release / edit the release
+      id-token: write       # attestations de provenance (Sigstore) / provenance attestations (Sigstore)
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
+        with:
+          name: packages
+          path: release
+
+      - name: Attestations de provenance / provenance attestations
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a   # v3
+        with:
+          subject-path: |
+            release/fastver_*_amd64.deb
+            release/fastver-*.x86_64.rpm
+
+      - name: Empreintes / checksums
+        run: |
+          cd release
+          for f in fastver_*_amd64.deb fastver-*.x86_64.rpm; do sha256sum "$f" > "$f.sha256"; done
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p SHA256SUMS -O SHA256SUMS.old
+          # Les lignes existantes restent telles quelles ; celles des paquets sont ajoutées (ou remplacées).
+          # Existing lines stay as they are; the package lines are added (or replaced).
+          grep -vE '  fastver(_.*_amd64\.deb|-.*\.x86_64\.rpm)$' SHA256SUMS.old > SHA256SUMS || true
+          cat fastver_*_amd64.deb.sha256 fastver-*.x86_64.rpm.sha256 >> SHA256SUMS
+          diff SHA256SUMS.old SHA256SUMS || true
+          sha256sum -c SHA256SUMS --ignore-missing
+
+      - name: Ajout à la release / add to the release
+        run: |
+          cd release
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber \
+            fastver_*_amd64.deb fastver_*_amd64.deb.sha256 fastver-*.x86_64.rpm fastver-*.x86_64.rpm.sha256 SHA256SUMS
+          v=${TAG#v}
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body' > notes.md
+          if ! grep -q "Paquets Linux / Linux packages" notes.md; then
+            cat >> notes.md <<EOF
+
+          ## Paquets Linux / Linux packages
+
+          Ajoutés après la publication : même programme que \`FastVer-x86_64.AppImage\`, empaqueté.
+          Added after publication: same program as \`FastVer-x86_64.AppImage\`, packaged.
+
+          - **Debian 12+, Ubuntu 22.04+ :** \`sudo apt install ./fastver_${v}_amd64.deb\`
+          - **Fedora, RHEL 9+ (Rocky, Alma) :** \`sudo dnf install ./fastver-${v}-1.x86_64.rpm\`
+          - **openSUSE :** \`sudo zypper install --allow-unsigned-rpm ./fastver-${v}-1.x86_64.rpm\`
+
+          Commandes / commands: \`fastver\`, \`fastver-cli\`. Mises à jour par le gestionnaire de paquets / updates through the package manager.
+          EOF
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file notes.md
+          fi
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
