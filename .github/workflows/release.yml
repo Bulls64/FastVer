@@ -245,6 +245,9 @@ jobs:
           install -o builder -m 644 artifacts/FastVer-x86_64.AppImage \
             "/home/builder/fastver-bin/FastVer-$VERSION-x86_64.AppImage"
           cd /home/builder/fastver-bin
+          # Dépendances installées par root (makepkg -s exigerait sudo pour builder).
+          # Dependencies installed by root (makepkg -s would need sudo for builder).
+          pacman -S --noconfirm --needed $(source PKGBUILD; echo "${depends[@]}")
           su builder -c "makepkg --printsrcinfo | diff -u .SRCINFO -"
           su builder -c "makepkg -f --noconfirm"
           namcap PKGBUILD fastver-bin-*.pkg.tar.zst || true
