@@ -252,9 +252,6 @@ jobs:
         shell: bash
         run: |
           ${{ matrix.install }} ./artifacts/fastver-*.${{ matrix.arch }}.rpm ${{ matrix.extra }}
-          # Bibliothèques introuvables pour le programme installé (aucune attendue)
-          # Libraries the installed program can't find (none expected)
-          find /usr/lib/fastver -name "*.so*" -type f -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true
           rpm -q fastver
           rpm -V fastver
           fastver --version
