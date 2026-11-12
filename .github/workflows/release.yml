@@ -221,6 +221,11 @@ jobs:
             image: fedora:latest
             install: dnf install -y
             extra: xorg-x11-server-Xvfb dejavu-sans-fonts
+          # Valeurs communes d'abord : une entrée plus loin peut les remplacer (règle de GitHub).
+          # Shared values first: a later entry may replace them (GitHub rule).
+          - distro: rocky
+            install: dnf install -y
+            extra: xorg-x11-server-Xvfb dejavu-sans-fonts
           - distro: rocky
             arch: x86_64
             image: rockylinux/rockylinux:9
@@ -232,9 +237,6 @@ jobs:
             # window is tested on Fedora aarch64.
             gui: "no"
             extra: dejavu-sans-fonts
-          - distro: rocky
-            install: dnf install -y
-            extra: xorg-x11-server-Xvfb dejavu-sans-fonts
           - distro: opensuse
             image: opensuse/tumbleweed
             install: zypper -n install --allow-unsigned-rpm
