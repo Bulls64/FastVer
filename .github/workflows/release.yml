@@ -1,6 +1,6 @@
-# Compile FastVer.exe et FastVer-cli.exe (Windows), FastVer-<x86_64|aarch64>.AppImage et les paquets .deb et .rpm (Linux, x86_64 et aarch64), les vérifie, calcule les
+# Compile FastVer.exe et FastVer-cli.exe (Windows x64 et ARM64 : suffixe -arm64), FastVer-<x86_64|aarch64>.AppImage et les paquets .deb et .rpm (Linux, x86_64 et aarch64), les vérifie, calcule les
 # empreintes SHA-256 et publie la release.
-# Builds FastVer.exe and FastVer-cli.exe (Windows), FastVer-<x86_64|aarch64>.AppImage and the .deb and .rpm packages (Linux, x86_64 and aarch64), checks them, computes the
+# Builds FastVer.exe and FastVer-cli.exe (Windows x64 and ARM64: -arm64 suffix), FastVer-<x86_64|aarch64>.AppImage and the .deb and .rpm packages (Linux, x86_64 and aarch64), checks them, computes the
 # SHA-256 checksums and publishes the release.
 #
 # Publier une version / publish a version :
@@ -36,8 +36,22 @@ env:
   PIN_PRINT: ${{ inputs.pin_print && '1' || '' }}
 
 jobs:
+  # x64 sur windows-latest ; ARM64 natif sur windows-11-arm (FastVer-arm64.exe, FastVer-cli-arm64.exe).
+  # x64 on windows-latest; native ARM64 on windows-11-arm (FastVer-arm64.exe, FastVer-cli-arm64.exe).
   windows:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            suffix: ""
+            machine: "8664"     # IMAGE_FILE_MACHINE_AMD64
+          - arch: arm64
+            runner: windows-11-arm
+            suffix: "-arm64"
+            machine: "AA64"     # IMAGE_FILE_MACHINE_ARM64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
@@ -45,6 +59,7 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5
         with:
           python-version: "3.13"
+          architecture: ${{ matrix.arch }}
 
       - name: Dépendances / dependencies
         run: |
@@ -66,11 +81,26 @@ jobs:
           python -m PyInstaller --noconfirm --clean FastVer.spec
           python -m PyInstaller --noconfirm --clean FastVer-cli.spec
 
+      - name: Noms et architecture des exe / exe names and architecture
+        shell: pwsh
+        run: |
+          if ("${{ matrix.suffix }}") {
+            Rename-Item dist\FastVer.exe "FastVer${{ matrix.suffix }}.exe"
+            Rename-Item dist\FastVer-cli.exe "FastVer-cli${{ matrix.suffix }}.exe"
+          }
+          foreach ($f in "FastVer${{ matrix.suffix }}.exe", "FastVer-cli${{ matrix.suffix }}.exe") {
+            $b = [IO.File]::ReadAllBytes("dist\$f")
+            $pe = [BitConverter]::ToInt32($b, 0x3C)
+            $m = '{0:X4}' -f [BitConverter]::ToUInt16($b, $pe + 4)
+            "$f : machine $m"
+            if ($m -ne "${{ matrix.machine }}") { throw "$f : architecture $m inattendue (attendu ${{ matrix.machine }})" }
+          }
+
       - name: Autotest de l'exe / exe self-test
         shell: pwsh
         timeout-minutes: 3
         run: |
-          $p = Start-Process -FilePath dist\FastVer.exe -ArgumentList "--selftest" -PassThru -Wait
+          $p = Start-Process -FilePath "dist\FastVer${{ matrix.suffix }}.exe" -ArgumentList "--selftest" -PassThru -Wait
           Get-Content (Join-Path $env:TEMP "fastver.log") -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "Autotest en échec (code $($p.ExitCode))" }
 
@@ -78,18 +108,48 @@ jobs:
         shell: pwsh
         timeout-minutes: 3
         run: |
-          dist\FastVer-cli.exe --version
-          dist\FastVer-cli.exe --demo --specs --no-color
-          if ($LASTEXITCODE -ne 0) { throw "FastVer-cli.exe en échec (code $LASTEXITCODE)" }
-          $j = (dist\FastVer-cli.exe --demo --json | Out-String) | ConvertFrom-Json
+          $cli = "dist\FastVer-cli${{ matrix.suffix }}.exe"
+          & $cli --version
+          & $cli --demo --specs --no-color
+          if ($LASTEXITCODE -ne 0) { throw "$cli en échec (code $LASTEXITCODE)" }
+          $j = (& $cli --demo --json | Out-String) | ConvertFrom-Json
           if ($j.os.host -ne "PC-DEMO" -or $j.specs.Count -lt 10) { throw "Sortie JSON inattendue" }
+
+      # La mise à jour automatique choisit l'exe ARM64 sur un PC ARM64, y compris depuis l'exe x64 émulé :
+      # windows_arm64() (fastver.py) est vérifiée avec le Python natif et avec un Python x64 émulé.
+      # The automatic update picks the ARM64 exe on an ARM64 PC, including from the emulated x64 exe:
+      # windows_arm64() (fastver.py) is checked with the native Python and with an emulated x64 Python.
+      - name: Python x64 émulé / emulated x64 Python
+        if: matrix.arch == 'arm64'
+        id: py64
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5
+        with:
+          python-version: "3.13"
+          architecture: x64
+          update-environment: false
+
+      - name: Détection ARM64 / ARM64 detection
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $code = @'
+          import ast, ctypes, os, platform
+          tree = ast.parse(open("fastver.py", encoding="utf-8").read())
+          fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "windows_arm64")
+          ns = {"ctypes": ctypes, "os": os, "platform": platform}
+          exec(compile(ast.Module([fn], []), "fastver.py", "exec"), ns)
+          print(platform.machine(), "→ windows_arm64() =", ns["windows_arm64"]())
+          assert ns["windows_arm64"]()
+          '@
+          python -I -c $code
+          & "${{ steps.py64.outputs.python-path }}" -I -c $code
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
-          name: windows
+          name: windows-${{ matrix.arch }}
           path: |
-            dist/FastVer.exe
-            dist/FastVer-cli.exe
+            dist/FastVer${{ matrix.suffix }}.exe
+            dist/FastVer-cli${{ matrix.suffix }}.exe
 
   linux:
     # x86_64 sur Ubuntu 22.04 : les bibliothèques ajoutées à l'AppImage restent compatibles avec glibc 2.34,
@@ -282,10 +342,10 @@ jobs:
       - name: Empreintes SHA-256 / checksums
         run: |
           mkdir release
-          cp artifacts/windows/FastVer.exe artifacts/windows/FastVer-cli.exe artifacts/linux-*/FastVer-*.AppImage \
+          cp artifacts/windows-*/FastVer*.exe artifacts/linux-*/FastVer-*.AppImage \
             artifacts/linux-*/fastver_*.deb artifacts/linux-*/fastver-*.rpm fastver.py release/
           cd release
-          for f in FastVer.exe FastVer-cli.exe FastVer-*.AppImage fastver_*.deb fastver-*.rpm fastver.py; do
+          for f in FastVer*.exe FastVer-*.AppImage fastver_*.deb fastver-*.rpm fastver.py; do
             sha256sum "$f" > "$f.sha256"
           done
           cat *.sha256 > SHA256SUMS
@@ -307,8 +367,7 @@ jobs:
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a   # v3
         with:
           subject-path: |
-            release/FastVer.exe
-            release/FastVer-cli.exe
+            release/FastVer*.exe
             release/FastVer-*.AppImage
             release/fastver_*.deb
             release/fastver-*.rpm

@@ -213,14 +213,39 @@ APPIMAGE = os.environ.get("APPIMAGE") if FROZEN and sys.platform.startswith("lin
 PACKAGE = ("exe" if os.name == "nt" else "appimage" if APPIMAGE else "frozen") if FROZEN else "script"
 if PACKAGE == "exe" and "cli" in os.path.basename(sys.executable).lower():
     PACKAGE = "exe-cli"   # FastVer-cli.exe : version console, sans Qt / console version, without Qt
-# Fichier à télécharger lors d'une mise à jour, et nom de la copie gardée de l'ancienne version.
-# File to download when updating, and name of the copy kept of the old version.
-APP_ASSET, BACKUP_NAME = {
-    "exe": ("FastVer.exe", "FastVer-{v}.bak.exe"),
-    "exe-cli": ("FastVer-cli.exe", "FastVer-cli-{v}.bak.exe"),
-    "appimage": (f"FastVer-{platform.machine()}.AppImage", "FastVer-{v}.bak.AppImage"),
-    "script": ("fastver.py", "fastver-{v}.bak.py"),
-}.get(PACKAGE, (None, None))
+
+
+def windows_arm64():
+    """Vrai si Windows tourne sur un processeur ARM64, même quand FastVer est l'exe x64 émulé : seul
+    IsWow64Process2 donne l'architecture réelle (platform.machine() répond « AMD64 » sous émulation).
+    True if Windows runs on an ARM64 processor, even when FastVer is the emulated x64 exe: only
+    IsWow64Process2 gives the real architecture (platform.machine() answers “AMD64” under emulation)."""
+    if os.name != "nt":
+        return False
+    try:
+        k32 = ctypes.windll.kernel32
+        process, native = ctypes.c_ushort(), ctypes.c_ushort()
+        if k32.IsWow64Process2(ctypes.c_void_p(k32.GetCurrentProcess()), ctypes.byref(process),
+                               ctypes.byref(native)):
+            return native.value == 0xAA64   # IMAGE_FILE_MACHINE_ARM64
+    except (AttributeError, OSError):       # Windows 10 avant 1709 / Windows 10 before 1709
+        pass
+    return platform.machine().upper() == "ARM64"
+
+
+# Fichiers à télécharger lors d'une mise à jour, par ordre de préférence, et nom de la copie gardée de
+# l'ancienne version. Sur un PC ARM64, l'exe natif est préféré (l'exe x64 émulé passe ainsi au natif) ;
+# l'exe x64 reste le repli pour une release qui n'aurait pas de version ARM64.
+# Files to download when updating, in order of preference, and name of the copy kept of the old version.
+# On an ARM64 PC the native exe is preferred (the emulated x64 exe thus moves to native); the x64 exe stays
+# the fallback for a release without an ARM64 build.
+_ARM = ("-arm64",) if PACKAGE in ("exe", "exe-cli") and windows_arm64() else ()
+APP_ASSETS, BACKUP_NAME = {
+    "exe": (tuple(f"FastVer{a}.exe" for a in _ARM + ("",)), "FastVer-{v}.bak.exe"),
+    "exe-cli": (tuple(f"FastVer-cli{a}.exe" for a in _ARM + ("",)), "FastVer-cli-{v}.bak.exe"),
+    "appimage": ((f"FastVer-{platform.machine()}.AppImage",), "FastVer-{v}.bak.AppImage"),
+    "script": (("fastver.py",), "fastver-{v}.bak.py"),
+}.get(PACKAGE, ((), None))
 if FROZEN and sys.platform.startswith("linux"):
     # PyInstaller fait pointer LD_LIBRARY_PATH vers ses propres bibliothèques : les programmes lancés par
     # FastVer (fastfetch, navigateur, gsettings…) les chargeraient à la place de celles du système et
@@ -1628,10 +1653,11 @@ def app_check():
         return dict(latest=None, url=None, action=None, sha256=None)
     tag = str(rel.get("tag_name", ""))
     page = safe_page(rel.get("html_url"), f"https://github.com/{UPDATE_REPO}/releases/latest")
-    asset = next((a.get("browser_download_url") for a in rel.get("assets") or []
-                  if APP_ASSET and str(a.get("name", "")).lower() == APP_ASSET.lower()), None)
-    sha = release_sha256(rel, APP_ASSET) if asset else None   # APP_ASSET None (« frozen ») → page
-                                                              # APP_ASSET None (“frozen”) → page
+    by_name = {str(a.get("name", "")).lower(): a for a in rel.get("assets") or []}
+    name = next((n for n in APP_ASSETS if n.lower() in by_name), None)   # aucun (« frozen ») → page
+                                                                          # none (“frozen”) → page
+    asset = by_name[name.lower()].get("browser_download_url") if name else None
+    sha = release_sha256(rel, name) if asset else None
     if not asset or not sha:
         # Sans le fichier attendu ou sans empreinte pour le vérifier, aucune installation automatique :
         # on propose seulement d'ouvrir la page de la version.
