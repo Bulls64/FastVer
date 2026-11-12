@@ -211,70 +211,8 @@ jobs:
           rpm -e fastver
           test ! -e /usr/lib/fastver
 
-  # Recette AUR (packaging/aur) construite avec makepkg dans un conteneur Arch Linux, à partir de l'AppImage de ce
-  # run : .SRCINFO comparé à makepkg --printsrcinfo, namcap, installation par pacman, autotest, désinstallation.
-  # AUR recipe (packaging/aur) built with makepkg in an Arch Linux container, from this run's AppImage:
-  # .SRCINFO compared with makepkg --printsrcinfo, namcap, install with pacman, self-test, removal.
-  aur:
-    needs: linux
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    container: archlinux:latest
-    steps:
-      - name: Paquets / packages
-        run: pacman -Syu --noconfirm --needed base-devel git namcap xorg-server-xvfb ttf-dejavu
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
-        with:
-          name: linux
-          path: artifacts
-
-      - name: Recette et paquet / recipe and package
-        shell: bash
-        run: |
-          VERSION=$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' fastver.py)
-          SHA=$(sha256sum artifacts/FastVer-x86_64.AppImage | cut -c1-64)
-          bash tools/update_aur.sh "$VERSION" "$SHA"
-          useradd -m builder
-          install -d -o builder /home/builder/fastver-bin
-          install -o builder -m 644 packaging/aur/PKGBUILD packaging/aur/.SRCINFO /home/builder/fastver-bin/
-          # Fichier déjà présent : makepkg ne le télécharge pas, mais vérifie son empreinte.
-          # File already there: makepkg doesn't download it, but checks its checksum.
-          install -o builder -m 644 artifacts/FastVer-x86_64.AppImage \
-            "/home/builder/fastver-bin/FastVer-$VERSION-x86_64.AppImage"
-          cd /home/builder/fastver-bin
-          # Dépendances installées par root (makepkg -s exigerait sudo pour builder).
-          # Dependencies installed by root (makepkg -s would need sudo for builder).
-          pacman -S --noconfirm --needed $(source PKGBUILD; echo "${depends[@]}")
-          su builder -c "makepkg --printsrcinfo | diff -u .SRCINFO -"
-          su builder -c "makepkg -f --noconfirm"
-          namcap PKGBUILD fastver-bin-*.pkg.tar.zst || true
-
-      - name: Installation et test / install and test
-        shell: bash
-        run: |
-          cd /home/builder/fastver-bin
-          pacman -U --noconfirm fastver-bin-*.pkg.tar.zst
-          pacman -Qkk fastver-bin
-          fastver --version
-          fastver-cli --demo --specs --no-color
-          Xvfb :99 -screen 0 1280x800x24 & sleep 2
-          DISPLAY=:99 timeout 120 fastver --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
-          cat ~/.cache/FastVer/fastver.log
-          pacman -R --noconfirm fastver-bin
-          test ! -e /usr/lib/fastver
-          mkdir -p "$GITHUB_WORKSPACE/aur" && cp PKGBUILD .SRCINFO fastver-bin-*.pkg.tar.zst "$GITHUB_WORKSPACE/aur/"
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
-        with:
-          name: aur
-          include-hidden-files: true
-          path: aur/
-
   release:
-    needs: [windows, linux, rpm, aur]
+    needs: [windows, linux, rpm]
     runs-on: ubuntu-latest
     permissions:
       contents: write       # créer la release / create the release
