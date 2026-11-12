@@ -227,8 +227,11 @@ jobs:
           - distro: rocky
             arch: aarch64
             image: rockylinux/rockylinux:10
-            # RHEL 10 ne fournit plus Xvfb : il vient de l'EPEL / RHEL 10 no longer ships Xvfb: it comes from EPEL
-            pre: dnf install -y epel-release
+            # RHEL 10 ne fournit plus Xvfb (ni l'EPEL) : installation et CLI seulement ; la fenêtre est testée
+            # sous Fedora aarch64. / RHEL 10 no longer ships Xvfb (nor does EPEL): install and CLI only; the
+            # window is tested on Fedora aarch64.
+            gui: "no"
+            extra: dejavu-sans-fonts
           - distro: rocky
             install: dnf install -y
             extra: xorg-x11-server-Xvfb dejavu-sans-fonts
@@ -246,7 +249,6 @@ jobs:
       - name: Installation et test / install and test
         shell: bash
         run: |
-          ${{ matrix.pre || 'true' }}
           ${{ matrix.install }} ./artifacts/fastver-*.${{ matrix.arch }}.rpm ${{ matrix.extra }}
           # Bibliothèques introuvables pour le programme installé (aucune attendue)
           # Libraries the installed program can't find (none expected)
@@ -255,10 +257,12 @@ jobs:
           rpm -V fastver
           fastver --version
           fastver-cli --demo --specs --no-color
-          Xvfb :99 -screen 0 1280x800x24 & sleep 2
-          DISPLAY=:99 timeout 120 fastver --selftest || {
-            cat ~/.cache/FastVer/fastver.log; DISPLAY=:99 QT_DEBUG_PLUGINS=1 fastver --selftest 2>&1 | tail -40; exit 1; }
-          cat ~/.cache/FastVer/fastver.log
+          if [ "${{ matrix.gui }}" != "no" ]; then
+            Xvfb :99 -screen 0 1280x800x24 & sleep 2
+            DISPLAY=:99 timeout 120 fastver --selftest || {
+              cat ~/.cache/FastVer/fastver.log; DISPLAY=:99 QT_DEBUG_PLUGINS=1 fastver --selftest 2>&1 | tail -40; exit 1; }
+            cat ~/.cache/FastVer/fastver.log
+          fi
           rpm -e fastver
           test ! -e /usr/lib/fastver
 

@@ -27,12 +27,16 @@ SYSTEM_LIBS = (
     "libgbm.so", "libX11", "libxcb.so", "libXau.so", "libXdmcp.so", "libXext.so", "libXrender.so",
     "libfontconfig.so", "libfreetype.so", "libharfbuzz.so", "libexpat.so", "libz.so",
     "libdbus-1.so", "libsystemd.so", "libudev.so", "libgcrypt.so", "libgpg-error.so", "libcap.so",
-    "liblzma.so", "libzstd.so", "liblz4.so", "libbz2.so", "libbrotli", "libpng16.so", "libbsd.so", "libmd.so",
+    "liblzma.so", "libzstd.so", "liblz4.so", "libbz2.so", "libbrotli", "libpng16.so",
     "libglib-2.0.so", "libgobject-2.0.so", "libgio-2.0.so", "libgmodule-2.0.so", "libgthread-2.0.so",
     "libpcre2", "libffi.so", "libmount.so", "libblkid.so", "libselinux.so", "libuuid.so",
     "libwayland-client.so", "libwayland-cursor.so", "libwayland-egl.so",
     "libgtk-3.so", "libgdk-3.so", "libcairo", "libpango", "libatk", "libatspi", "libepoxy.so", "libgdk_pixbuf",
 )
+# libbsd et libmd ne sont pas dans la liste : absentes des installations minimales de Fedora et d'openSUSE, elles
+# sont demandées par la version aarch64 (compilée sous Ubuntu 24.04) et donc embarquées si besoin.
+# libbsd and libmd are not in the list: missing from minimal Fedora and openSUSE installs, they are needed by the
+# aarch64 build (made on Ubuntu 24.04) and therefore bundled when needed.
 DROP_DIRS = ("platformthemes/libqgtk3", "egldeviceintegrations", "wayland-graphics-integration-server", "tls", "networkinformation",
              "qmltooling", "position", "sqldrivers", "multimedia", "printsupport")
 
