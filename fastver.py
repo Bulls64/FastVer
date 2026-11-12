@@ -117,15 +117,29 @@ def load_network():
     import urllib.request
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.4.3"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.4"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-06-a"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-12-a"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
 # What's new, shown in the “What's new in v…” window (most recent first).
 # Add an entry with every new version; only the APP_VERSION one is shown.
 CHANGELOG = {
+    "1.4.4": {
+        "fr": ["Windows sur ARM : versions natives FastVer-arm64.exe et FastVer-cli-arm64.exe. Sur un PC ARM, la "
+               "mise à jour installe d'elle-même la version native, y compris depuis l'exe x64.",
+               "Linux ARM 64 bits (aarch64) : AppImage, paquet .deb et paquet .rpm (glibc 2.39 ou plus : Ubuntu "
+               "24.04, Debian 13, Fedora 40, RHEL 10 et plus récentes).",
+               "Paquets .deb (Debian, Ubuntu) et .rpm (Fedora, RHEL, openSUSE) : installation par le gestionnaire "
+               "de paquets, avec l'entrée de menu et les commandes fastver et fastver-cli."],
+        "en": ["Windows on ARM: native FastVer-arm64.exe and FastVer-cli-arm64.exe. On an ARM PC, the update "
+               "installs the native build by itself, including from the x64 exe.",
+               "64-bit ARM Linux (aarch64): AppImage, .deb package and .rpm package (glibc 2.39 or later: Ubuntu "
+               "24.04, Debian 13, Fedora 40, RHEL 10 and newer).",
+               ".deb (Debian, Ubuntu) and .rpm (Fedora, RHEL, openSUSE) packages: installed through the package "
+               "manager, with the menu entry and the fastver and fastver-cli commands."],
+    },
     "1.4.3": {
         "fr": ["Démarrage plus rapide : Fastfetch est lu pendant que l'interface se charge, et la fenêtre s'affiche "
                "le plus souvent directement avec vos informations.",
