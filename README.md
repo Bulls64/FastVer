@@ -19,6 +19,7 @@ Une fenêtre « À propos » pour [Fastfetch](https://github.com/fastfetch-cli/f
 
 - **Windows :** téléchargez `FastVer.exe` depuis la [dernière version](../../releases/latest) (ou `FastVer-cli.exe` pour la version en ligne de commande). Fastfetch doit être installé (`winget install Fastfetch-cli.Fastfetch`).
 - **Linux :** téléchargez `FastVer-x86_64.AppImage`, rendez-le exécutable (`chmod +x FastVer-x86_64.AppImage`) et lancez-le. Il embarque Python et Qt ; il faut seulement Fastfetch et une distribution avec glibc 2.34 ou plus (Ubuntu 22.04, Debian 12, Fedora 35, RHEL 9 et plus récentes). Si FUSE manque : `./FastVer-x86_64.AppImage --appimage-extract-and-run`.
+- **Linux ARM 64 bits (aarch64 : Raspberry Pi 4/5, Ampere, Snapdragon…) :** mêmes fichiers en version aarch64 : `FastVer-aarch64.AppImage`, `fastver_<version>_arm64.deb`, `fastver-<version>-1.aarch64.rpm`. Il faut glibc 2.39 ou plus (Ubuntu 24.04, Debian 13, Raspberry Pi OS basé sur Debian 13, Fedora 40, RHEL 10 et plus récentes), car PySide6 n'existe sur ARM que dans cette version.
 - **Debian, Ubuntu et dérivées :** téléchargez `fastver_<version>_amd64.deb` et installez-le avec `sudo apt install ./fastver_<version>_amd64.deb` (Debian 12, Ubuntu 22.04 et plus récentes). FastVer apparaît dans le menu des applications ; les commandes `fastver` et `fastver-cli` sont ajoutées. Désinstallation : `sudo apt remove fastver`.
 - **Fedora, RHEL et dérivées (Rocky, Alma), openSUSE :** téléchargez `fastver-<version>-1.x86_64.rpm` et installez-le avec `sudo dnf install ./fastver-<version>-1.x86_64.rpm` (ou `sudo zypper install --allow-unsigned-rpm ./fastver-<version>-1.x86_64.rpm` sous openSUSE). Mêmes commandes et même entrée de menu que le .deb. Désinstallation : `sudo dnf remove fastver` ou `sudo zypper remove fastver`.
 - **Script :** `pip install PySide6-Fluent-Widgets`, puis `python fastver.py`.
@@ -65,7 +66,7 @@ gh attestation verify FastVer.exe --repo Bulls64/FastVer
 1. Changer `APP_VERSION` et `BUILD` dans `fastver.py`.
 2. `git tag v1.2.0 && git push origin v1.2.0`
 
-Le workflow `.github/workflows/release.yml` compile alors les deux exe sur Windows et l'AppImage et les paquets .deb et .rpm sur Ubuntu 22.04, les teste (le .rpm dans des conteneurs Fedora, Rocky Linux 9 et openSUSE) (`--selftest` pour la fenêtre, `--demo` et `--json` pour la version CLI), calcule les empreintes et publie la release avec `FastVer.exe`, `FastVer-cli.exe`, `FastVer-x86_64.AppImage`, `fastver_<version>_amd64.deb`, `fastver-<version>-1.x86_64.rpm`, `fastver.py`, leurs `.sha256` et `SHA256SUMS`.
+Le workflow `.github/workflows/release.yml` compile alors les deux exe sur Windows et l'AppImage et les paquets .deb et .rpm sur Ubuntu 22.04 (x86_64) et Ubuntu 24.04 ARM (aarch64), les teste (le .rpm dans des conteneurs Fedora, Rocky Linux 9 ou 10 et openSUSE, pour chaque architecture) (`--selftest` pour la fenêtre, `--demo` et `--json` pour la version CLI), calcule les empreintes et publie la release avec `FastVer.exe`, `FastVer-cli.exe`, `FastVer-<x86_64|aarch64>.AppImage`, `fastver_<version>_<amd64|arm64>.deb`, `fastver-<version>-1.<x86_64|aarch64>.rpm`, `fastver.py`, leurs `.sha256` et `SHA256SUMS`.
 
 Compilation locale (dépendances) : `pip install -r requirements-build.txt`, puis `pip install --no-deps -r requirements-nodeps.txt`.
 
@@ -92,6 +93,7 @@ The screenshots above show, in order: the light theme, the dark theme with the d
 
 - **Windows:** download `FastVer.exe` from the [latest release](../../releases/latest) (or `FastVer-cli.exe` for the command-line version). Fastfetch must be installed (`winget install Fastfetch-cli.Fastfetch`).
 - **Linux:** download `FastVer-x86_64.AppImage`, make it executable (`chmod +x FastVer-x86_64.AppImage`) and run it. It bundles Python and Qt; all you need is Fastfetch and a distribution with glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35, RHEL 9 and newer). If FUSE is missing: `./FastVer-x86_64.AppImage --appimage-extract-and-run`.
+- **64-bit ARM Linux (aarch64: Raspberry Pi 4/5, Ampere, Snapdragon…):** same files in aarch64 builds: `FastVer-aarch64.AppImage`, `fastver_<version>_arm64.deb`, `fastver-<version>-1.aarch64.rpm`. They need glibc 2.39 or later (Ubuntu 24.04, Debian 13, Raspberry Pi OS based on Debian 13, Fedora 40, RHEL 10 and newer), since PySide6 on ARM only ships for that version.
 - **Debian, Ubuntu and derivatives:** download `fastver_<version>_amd64.deb` and install it with `sudo apt install ./fastver_<version>_amd64.deb` (Debian 12, Ubuntu 22.04 and newer). FastVer shows up in the applications menu; the `fastver` and `fastver-cli` commands are added. To uninstall: `sudo apt remove fastver`.
 - **Fedora, RHEL and derivatives (Rocky, Alma), openSUSE:** download `fastver-<version>-1.x86_64.rpm` and install it with `sudo dnf install ./fastver-<version>-1.x86_64.rpm` (or `sudo zypper install --allow-unsigned-rpm ./fastver-<version>-1.x86_64.rpm` on openSUSE). Same commands and menu entry as the .deb. To uninstall: `sudo dnf remove fastver` or `sudo zypper remove fastver`.
 - **Script:** `pip install PySide6-Fluent-Widgets`, then `python fastver.py`.
@@ -130,7 +132,7 @@ gh attestation verify FastVer.exe --repo Bulls64/FastVer
 1. Change `APP_VERSION` and `BUILD` in `fastver.py`.
 2. `git tag v1.2.0 && git push origin v1.2.0`
 
-The `.github/workflows/release.yml` workflow then builds both exes on Windows and the AppImage and .deb and .rpm packages on Ubuntu 22.04, tests them (the .rpm in Fedora, Rocky Linux 9 and openSUSE containers) (`--selftest` for the window, `--demo` and `--json` for the CLI version), computes the hashes and publishes the release with `FastVer.exe`, `FastVer-cli.exe`, `FastVer-x86_64.AppImage`, `fastver_<version>_amd64.deb`, `fastver-<version>-1.x86_64.rpm`, `fastver.py`, their `.sha256` files and `SHA256SUMS`.
+The `.github/workflows/release.yml` workflow then builds both exes on Windows and the AppImage and .deb and .rpm packages on Ubuntu 22.04 (x86_64) and Ubuntu 24.04 ARM (aarch64), tests them (the .rpm in Fedora, Rocky Linux 9 or 10 and openSUSE containers, for each architecture) (`--selftest` for the window, `--demo` and `--json` for the CLI version), computes the hashes and publishes the release with `FastVer.exe`, `FastVer-cli.exe`, `FastVer-<x86_64|aarch64>.AppImage`, `fastver_<version>_<amd64|arm64>.deb`, `fastver-<version>-1.<x86_64|aarch64>.rpm`, `fastver.py`, their `.sha256` files and `SHA256SUMS`.
 
 Local build (dependencies): `pip install -r requirements-build.txt`, then `pip install --no-deps -r requirements-nodeps.txt`.
 

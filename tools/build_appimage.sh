@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Construit FastVer-x86_64.AppImage : PyInstaller (dossier) → AppDir → appimagetool.
-# Builds FastVer-x86_64.AppImage: PyInstaller (folder) → AppDir → appimagetool.
+# Construit FastVer-<x86_64|aarch64>.AppImage (architecture de la machine) : PyInstaller (dossier) → AppDir → appimagetool.
+# Builds FastVer-<x86_64|aarch64>.AppImage (the machine's architecture): PyInstaller (folder) → AppDir → appimagetool.
 #
 # Prérequis / requirements : python -m pip install -r requirements-build.txt,
 #   python -m pip install --no-deps -r requirements-nodeps.txt, readelf et objdump (binutils),
@@ -50,7 +50,8 @@ chmod +x "$APPDIR/AppRun"
 echo "▶ glibc minimale exigée / minimum glibc required"
 GLIBC=$(find "$APPDIR" -type f \( -name "*.so*" -o -name FastVer \) -exec objdump -T {} + 2>/dev/null \
   | grep -oE "GLIBC_[0-9]+\.[0-9]+" | sort -u -V | tail -1 | cut -d_ -f2)
-MAX=${MAX_GLIBC:-2.34}   # minimum déjà imposé par Qt 6.12 / minimum already required by Qt 6.12
+MAX=${MAX_GLIBC:-2.34}   # minimum déjà imposé par Qt 6.12 (2.39 pour aarch64, voir le workflow)
+                         # minimum already required by Qt 6.12 (2.39 for aarch64, see the workflow)
 echo "  glibc $GLIBC (limite / limit $MAX)"
 if [ "$(printf '%s\n%s\n' "$GLIBC" "$MAX" | sort -V | tail -1)" != "$MAX" ]; then
   echo "✗ Une bibliothèque embarquée exige glibc $GLIBC > $MAX : l'AppImage ne marcherait pas partout." >&2

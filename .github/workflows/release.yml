@@ -1,6 +1,6 @@
-# Compile FastVer.exe et FastVer-cli.exe (Windows), FastVer-x86_64.AppImage et les paquets .deb et .rpm (Linux), les vérifie, calcule les
+# Compile FastVer.exe et FastVer-cli.exe (Windows), FastVer-<x86_64|aarch64>.AppImage et les paquets .deb et .rpm (Linux, x86_64 et aarch64), les vérifie, calcule les
 # empreintes SHA-256 et publie la release.
-# Builds FastVer.exe and FastVer-cli.exe (Windows), FastVer-x86_64.AppImage and the .deb and .rpm packages (Linux), checks them, computes the
+# Builds FastVer.exe and FastVer-cli.exe (Windows), FastVer-<x86_64|aarch64>.AppImage and the .deb and .rpm packages (Linux, x86_64 and aarch64), checks them, computes the
 # SHA-256 checksums and publishes the release.
 #
 # Publier une version / publish a version :
@@ -30,13 +30,9 @@ permissions:
 # Pour changer de version : modifier l'adresse, lancer le workflow à la main avec « pin_print », recopier l'empreinte.
 # Tools downloaded during the build: fixed version and verified SHA-256 checksum (item A2).
 # To change version: edit the URL, run the workflow manually with “pin_print”, copy the checksum.
+# Les outils Linux, propres à chaque architecture, sont épinglés dans la matrice du job linux.
+# The Linux tools, specific to each architecture, are pinned in the linux job's matrix.
 env:
-  PY_URL: https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.13.14+20260718-x86_64-unknown-linux-gnu-install_only.tar.gz
-  PY_SHA256: 5df2686713fcc114290a3b37db3f7253eb837721820ddba4575fdc131e70ec59
-  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-  RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
-  RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
   PIN_PRINT: ${{ inputs.pin_print && '1' || '' }}
 
 jobs:
@@ -96,12 +92,48 @@ jobs:
             dist/FastVer-cli.exe
 
   linux:
-    # Ubuntu 22.04 : les bibliothèques ajoutées à l'AppImage restent compatibles avec glibc 2.34,
-    # le minimum déjà imposé par Qt 6.12.
-    # Ubuntu 22.04: the libraries added to the AppImage stay compatible with glibc 2.34,
-    # the minimum already required by Qt 6.12.
-    runs-on: ubuntu-22.04
+    # x86_64 sur Ubuntu 22.04 : les bibliothèques ajoutées à l'AppImage restent compatibles avec glibc 2.34,
+    # le minimum déjà imposé par Qt 6.12. aarch64 sur Ubuntu 24.04 ARM : PySide6 n'y existe qu'en roues
+    # manylinux_2_39, d'où glibc 2.39 au minimum (Ubuntu 24.04, Debian 13, Fedora 40, RHEL 10).
+    # x86_64 on Ubuntu 22.04: the libraries added to the AppImage stay compatible with glibc 2.34, the minimum
+    # already required by Qt 6.12. aarch64 on Ubuntu 24.04 ARM: PySide6 only ships manylinux_2_39 wheels
+    # there, hence glibc 2.39 at least (Ubuntu 24.04, Debian 13, Fedora 40, RHEL 10).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            deb: amd64
+            fuse: libfuse2
+            max_glibc: "2.34"
+            py_url: https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.13.14+20260718-x86_64-unknown-linux-gnu-install_only.tar.gz
+            py_sha256: 5df2686713fcc114290a3b37db3f7253eb837721820ddba4575fdc131e70ec59
+            tool_url: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+            tool_sha256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+            runtime_url: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+            runtime_sha256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            deb: arm64
+            fuse: libfuse2t64
+            max_glibc: "2.39"
+            py_url: https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.13.14+20260718-aarch64-unknown-linux-gnu-install_only.tar.gz
+            py_sha256: 535b5091bf50a1832c04a69ead92c53a5bd27024c11426657ea5cc7b4122e24f
+            tool_url: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-aarch64.AppImage
+            tool_sha256: f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
+            runtime_url: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-aarch64
+            runtime_sha256: 00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    env:
+      PY_URL: ${{ matrix.py_url }}
+      PY_SHA256: ${{ matrix.py_sha256 }}
+      APPIMAGETOOL_URL: ${{ matrix.tool_url }}
+      APPIMAGETOOL_SHA256: ${{ matrix.tool_sha256 }}
+      RUNTIME_URL: ${{ matrix.runtime_url }}
+      RUNTIME_SHA256: ${{ matrix.runtime_sha256 }}
+      MAX_GLIBC: ${{ matrix.max_glibc }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
 
@@ -116,7 +148,7 @@ jobs:
       - name: Paquets système / system packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binutils xvfb libfuse2 libegl1 libxkbcommon-x11-0 \
+          sudo apt-get install -y --no-install-recommends binutils xvfb ${{ matrix.fuse }} libegl1 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libfontconfig1 libdbus-1-3 rpm
 
@@ -131,13 +163,13 @@ jobs:
       - name: Autotest de l'AppImage / AppImage self-test
         timeout-minutes: 3
         run: |
-          xvfb-run -a release/FastVer-x86_64.AppImage --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
+          xvfb-run -a release/FastVer-${{ matrix.arch }}.AppImage --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
           cat ~/.cache/FastVer/fastver.log
 
       - name: Mode CLI de l'AppImage / AppImage CLI mode
         run: |
-          release/FastVer-x86_64.AppImage --cli --demo --specs --no-color
-          release/FastVer-x86_64.AppImage --cli --demo --json | python -c "import json, sys; assert json.load(sys.stdin)['os']['host'] == 'PC-DEMO'"
+          release/FastVer-${{ matrix.arch }}.AppImage --cli --demo --specs --no-color
+          release/FastVer-${{ matrix.arch }}.AppImage --cli --demo --json | python -c "import json, sys; assert json.load(sys.stdin)['os']['host'] == 'PC-DEMO'"
 
       # Paquet .deb fait du même dossier PyInstaller que l'AppImage, puis installé et testé sur le runner.
       # .deb package made from the same PyInstaller folder as the AppImage, then installed and tested on the runner.
@@ -147,7 +179,7 @@ jobs:
       - name: Test du paquet .deb / .deb package test
         timeout-minutes: 5
         run: |
-          sudo apt-get install -y ./release/fastver_*_amd64.deb
+          sudo apt-get install -y ./release/fastver_*_${{ matrix.deb }}.deb
           fastver --version
           fastver-cli --demo --specs --no-color
           xvfb-run -a fastver --selftest || { cat ~/.cache/FastVer/fastver.log; exit 1; }
@@ -161,11 +193,11 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
         with:
-          name: linux
+          name: linux-${{ matrix.arch }}
           path: |
-            release/FastVer-x86_64.AppImage
-            release/fastver_*_amd64.deb
-            release/fastver-*.x86_64.rpm
+            release/FastVer-${{ matrix.arch }}.AppImage
+            release/fastver_*_${{ matrix.deb }}.deb
+            release/fastver-*.${{ matrix.arch }}.rpm
 
   # Installation réelle du .rpm sur trois familles : Fedora, RHEL (Rocky Linux 9, glibc 2.34 : le minimum)
   # et openSUSE. Le gestionnaire de paquets doit trouver toutes les dépendances déclarées ; l'autotest
@@ -175,32 +207,44 @@ jobs:
   # no undeclared library is missing.
   rpm:
     needs: linux
-    runs-on: ubuntu-latest
+    # RHEL : Rocky Linux 9 pour x86_64 (glibc 2.34), Rocky Linux 10 pour aarch64 (glibc 2.39 requise).
+    # RHEL: Rocky Linux 9 for x86_64 (glibc 2.34), Rocky Linux 10 for aarch64 (glibc 2.39 required).
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
+        arch: [x86_64, aarch64]
+        distro: [fedora, rocky, opensuse]
         include:
-          - image: fedora:latest
+          - distro: fedora
+            image: fedora:latest
             install: dnf install -y
             extra: xorg-x11-server-Xvfb dejavu-sans-fonts
-          - image: rockylinux/rockylinux:9
+          - distro: rocky
+            arch: x86_64
+            image: rockylinux/rockylinux:9
+          - distro: rocky
+            arch: aarch64
+            image: rockylinux/rockylinux:10
+          - distro: rocky
             install: dnf install -y
             extra: xorg-x11-server-Xvfb dejavu-sans-fonts
-          - image: opensuse/tumbleweed
+          - distro: opensuse
+            image: opensuse/tumbleweed
             install: zypper -n install --allow-unsigned-rpm
             extra: xorg-x11-server-Xvfb dejavu-fonts
     container: ${{ matrix.image }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4
         with:
-          name: linux
+          name: linux-${{ matrix.arch }}
           path: artifacts
 
       - name: Installation et test / install and test
         shell: bash
         run: |
-          ${{ matrix.install }} ./artifacts/fastver-*.x86_64.rpm ${{ matrix.extra }}
+          ${{ matrix.install }} ./artifacts/fastver-*.${{ matrix.arch }}.rpm ${{ matrix.extra }}
           rpm -q fastver
           rpm -V fastver
           fastver --version
@@ -228,11 +272,10 @@ jobs:
       - name: Empreintes SHA-256 / checksums
         run: |
           mkdir release
-          cp artifacts/windows/FastVer.exe artifacts/windows/FastVer-cli.exe artifacts/linux/FastVer-x86_64.AppImage \
-            artifacts/linux/fastver_*_amd64.deb artifacts/linux/fastver-*.x86_64.rpm fastver.py release/
+          cp artifacts/windows/FastVer.exe artifacts/windows/FastVer-cli.exe artifacts/linux-*/FastVer-*.AppImage \
+            artifacts/linux-*/fastver_*.deb artifacts/linux-*/fastver-*.rpm fastver.py release/
           cd release
-          for f in FastVer.exe FastVer-cli.exe FastVer-x86_64.AppImage fastver_*_amd64.deb fastver-*.x86_64.rpm \
-                   fastver.py; do
+          for f in FastVer.exe FastVer-cli.exe FastVer-*.AppImage fastver_*.deb fastver-*.rpm fastver.py; do
             sha256sum "$f" > "$f.sha256"
           done
           cat *.sha256 > SHA256SUMS
@@ -256,9 +299,9 @@ jobs:
           subject-path: |
             release/FastVer.exe
             release/FastVer-cli.exe
-            release/FastVer-x86_64.AppImage
-            release/fastver_*_amd64.deb
-            release/fastver-*.x86_64.rpm
+            release/FastVer-*.AppImage
+            release/fastver_*.deb
+            release/fastver-*.rpm
             release/fastver.py
 
       - name: Publier la release / publish the release

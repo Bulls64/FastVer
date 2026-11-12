@@ -19,6 +19,13 @@ BUNDLE=${BUNDLE:-$ROOT/build/FastVer.AppDir/usr/lib/fastver}
 VERSION=$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' fastver.py)
 [ -n "$VERSION" ] || { echo "✗ APP_VERSION introuvable dans fastver.py / not found" >&2; exit 1; }
 
+# glibc minimale exigée par le programme : 2.34 pour x86_64, 2.39 pour aarch64 (roues PySide6 manylinux_2_39).
+# Minimum glibc required by the program: 2.34 for x86_64, 2.39 for aarch64 (PySide6 manylinux_2_39 wheels).
+GLIBC_MIN=$(find "$BUNDLE" -type f \( -name "*.so*" -o -name FastVer \) -exec objdump -T {} + 2>/dev/null \
+  | grep -oE "GLIBC_[0-9]+\.[0-9]+" | sort -u -V | tail -1 | cut -d_ -f2)
+[ -n "$GLIBC_MIN" ] || { echo "✗ glibc minimale indéterminée (objdump, paquet binutils) / minimum glibc unknown" >&2; exit 1; }
+echo "  glibc >= $GLIBC_MIN"
+
 echo "▶ Arborescence du paquet / package tree (fastver $VERSION)"
 rm -rf "$PKG"
 mkdir -p "$PKG/usr/lib" "$PKG/usr/bin" "$PKG/usr/share/applications" \

@@ -29,7 +29,7 @@ install -D -m 644 LICENSE "$PKG/usr/share/licenses/fastver/LICENSE"
 # library names (sonames) so they hold on Fedora, RHEL and its derivatives, and openSUSE. rpm's automatic
 # detection is off: it would also declare the bundled libraries (Qt…) as provided by the package, which could
 # then wrongly satisfy other packages.
-LIBS="libc.so.6(GLIBC_2.34) libstdc++.so.6 libgcc_s.so.1 libz.so.1 libzstd.so.1 libglib-2.0.so.0 \
+LIBS="libc.so.6(GLIBC_$GLIBC_MIN) libstdc++.so.6 libgcc_s.so.1 libz.so.1 libzstd.so.1 libglib-2.0.so.0 \
 libgthread-2.0.so.0 libfontconfig.so.1 libfreetype.so.6 libdbus-1.so.3 libX11.so.6 libX11-xcb.so.1 libxcb.so.1 \
 libEGL.so.1 libGL.so.1 libdrm.so.2 libwayland-client.so.0 libwayland-cursor.so.0 libwayland-egl.so.1"
 REQUIRES=""

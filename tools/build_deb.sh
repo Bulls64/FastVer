@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Construit le paquet fastver_<version>_amd64.deb à partir du dossier PyInstaller déjà préparé pour l'AppImage.
-# Builds the fastver_<version>_amd64.deb package from the PyInstaller folder already prepared for the AppImage.
+# Construit le paquet fastver_<version>_<amd64|arm64>.deb à partir du dossier PyInstaller déjà préparé pour l'AppImage.
+# Builds the fastver_<version>_<amd64|arm64>.deb package from the PyInstaller folder already prepared for the AppImage.
 #
 # À lancer après tools/build_appimage.sh (qui laisse build/FastVer.AppDir), ou avec BUNDLE=<dossier> pointant
 # sur un dossier contenant FastVer et _internal (par exemple celui d'une AppImage extraite).
@@ -49,7 +49,7 @@ EOF
 # Les alternatives couvrent les noms de Debian 12+ et d'Ubuntu 22.04+ (passage à t64 en 24.04).
 # Dependencies: libraries the AppImage leaves to the system (see SYSTEM_LIBS in FastVer-linux.spec).
 # The alternatives cover Debian 12+ and Ubuntu 22.04+ names (t64 rename in 24.04).
-DEPENDS="libc6 (>= 2.34), libstdc++6, libgcc-s1, zlib1g, libzstd1, libglib2.0-0t64 | libglib2.0-0, \
+DEPENDS="libc6 (>= $GLIBC_MIN), libstdc++6, libgcc-s1, zlib1g, libzstd1, libglib2.0-0t64 | libglib2.0-0, \
 libfontconfig1, libfreetype6, libdbus-1-3, libx11-6, libx11-xcb1, libxcb1, libegl1, libgl1, libdrm2, \
 libwayland-client0, libwayland-cursor0, libwayland-egl1"
 SIZE=$(du -sk --apparent-size "$PKG/usr" | cut -f1)
