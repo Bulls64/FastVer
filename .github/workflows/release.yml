@@ -133,12 +133,12 @@ jobs:
         shell: pwsh
         run: |
           $code = @'
-          import ast, ctypes, os, platform
+          import ast, ctypes, os, platform, sysconfig
           tree = ast.parse(open("fastver.py", encoding="utf-8").read())
           fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "windows_arm64")
           ns = {"ctypes": ctypes, "os": os, "platform": platform}
           exec(compile(ast.Module([fn], []), "fastver.py", "exec"), ns)
-          print(platform.machine(), "→ windows_arm64() =", ns["windows_arm64"]())
+          print(sysconfig.get_platform(), "- windows_arm64() =", ns["windows_arm64"]())
           assert ns["windows_arm64"]()
           '@
           python -I -c $code
