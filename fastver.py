@@ -127,15 +127,27 @@ def load_network():
     import urllib.request
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.4.4"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.5"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-12-a"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-17-a"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
 # What's new, shown in the “What's new in v…” window (most recent first).
 # Add an entry with every new version; only the APP_VERSION one is shown.
 CHANGELOG = {
+    "1.4.5": {
+        "fr": ["macOS : nouvelle version pour les Mac Apple Silicon (FastVer-macos-arm64.dmg, macOS 14 ou plus), "
+               "avec Fastfetch installé par Homebrew (brew install fastfetch).",
+               "macOS : le fond acrylique reprend le fond d'écran sans demander d'autorisation, et FastVer trouve "
+               "Fastfetch même lancé depuis le Finder.",
+               "macOS : polices du système, sans délai au démarrage."],
+        "en": ["macOS: new build for Apple Silicon Macs (FastVer-macos-arm64.dmg, macOS 14 or later), with "
+               "Fastfetch installed through Homebrew (brew install fastfetch).",
+               "macOS: the acrylic background uses the wallpaper without asking for any permission, and FastVer "
+               "finds Fastfetch even when launched from the Finder.",
+               "macOS: system fonts, with no startup delay."],
+    },
     "1.4.4": {
         "fr": ["Windows sur ARM : versions natives FastVer-arm64.exe et FastVer-cli-arm64.exe. Sur un PC ARM, la "
                "mise à jour installe d'elle-même la version native, y compris depuis l'exe x64.",
