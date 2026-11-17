@@ -9,10 +9,12 @@ import re
 with open("fastver.py", encoding="utf-8") as f:
     VERSION = re.search(r'^APP_VERSION = "([^"]+)"', f.read(), re.M).group(1)
 
-# Fichiers retirés : FastVer n'en a pas besoin. / Files removed: FastVer doesn't need them.
+# Fichiers retirés : FastVer n'en a pas besoin. QtNetwork reste : PyInstaller l'a déjà relié par des liens
+# symboliques dans l'appli, et le retirer les casserait (signature invalide).
+# Files removed: FastVer doesn't need them. QtNetwork stays: PyInstaller has already linked it with symlinks inside
+# the app, and removing it would break them (invalid signature).
 DROP = {
     "libqminimal.dylib", "libqoffscreen.dylib",               # moteurs d'affichage inutilisés / unused platforms
-    "QtNetwork", "QtNetwork.abi3.so",                         # QtNetwork : jamais chargé / never loaded
     "libqtga.dylib", "libqtiff.dylib", "libqwbmp.dylib", "libqicns.dylib",  # formats exotiques / exotic formats
 }                                                              # (libqmacheif reste : fonds d'écran HEIC de macOS)
                                                                # (libqmacheif stays: macOS HEIC wallpapers)
