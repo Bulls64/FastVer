@@ -27,7 +27,10 @@ echo "▶ PyInstaller"
 "$PY" -m PyInstaller --noconfirm --clean FastVer-macos.spec
 APP=dist/FastVer.app
 lipo -archs "$APP/Contents/MacOS/FastVer"
-codesign --verify --deep --strict "$APP" && echo "✓ signature ad hoc valide / valid ad hoc signature"
+BROKEN=$(find "$APP" -type l ! -exec test -e {} \; -print)
+[ -z "$BROKEN" ] || { echo "✗ Liens cassés / broken links :"; echo "$BROKEN"; exit 1; }
+codesign --verify --deep --strict --verbose=4 "$APP"
+echo "✓ signature ad hoc valide / valid ad hoc signature"
 "$APP/Contents/MacOS/FastVer" --version
 
 echo "▶ Image disque / disk image"
