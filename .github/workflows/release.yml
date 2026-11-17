@@ -370,7 +370,9 @@ jobs:
           # PATH minimal d'une appli lancée depuis le Finder : Fastfetch doit être trouvé quand même.
           # Minimal PATH of an app launched from the Finder: Fastfetch must still be found.
           env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin "$APP" --cli --no-color | head -4
-          "$APP" --selftest || { cat ~/Library/Logs/FastVer/fastver.log; exit 1; }
+          "$APP" --selftest 2> "$RUNNER_TEMP/stderr.txt" || { cat ~/Library/Logs/FastVer/fastver.log; exit 1; }
+          # Aucune police absente cherchée par Qt (coûteux au démarrage) / no missing font looked up by Qt (slow start)
+          if grep "Populating font family aliases" "$RUNNER_TEMP/stderr.txt"; then exit 1; fi
           tail -15 ~/Library/Logs/FastVer/fastver.log
           spctl -a -vv dist/FastVer.app 2>&1 || true   # ad hoc : refusé par Gatekeeper, attendu / rejected, expected
 
@@ -385,7 +387,9 @@ jobs:
       - name: Capture d'écran / screenshot
         continue-on-error: true
         run: |
-          dist/FastVer.app/Contents/MacOS/FastVer & pid=$!
+          # Sans la fenêtre « Nouveautés », pour voir la fenêtre principale / without the “What's new” window
+          mkdir -p "$RUNNER_TEMP/cfg" && echo '{"whats_new_auto": false}' > "$RUNNER_TEMP/cfg/settings.json"
+          FASTVER_CONFIG_DIR="$RUNNER_TEMP/cfg" dist/FastVer.app/Contents/MacOS/FastVer & pid=$!
           sleep 10
           screencapture -x "$RUNNER_TEMP/shot.png"
           kill $pid || true

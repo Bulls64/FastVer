@@ -2600,7 +2600,7 @@ try:
                                 InfoBar, InfoBarPosition, MessageBoxBase, PrimaryPushButton, ProgressBar, PushButton,
                                 SettingCard, SimpleCardWidget, SmoothScrollArea,
                                 StrongBodyLabel, SubtitleLabel, SwitchButton, Theme, TitleLabel,
-                                ToolTipFilter, TransparentToolButton, isDarkTheme, setTheme,
+                                ToolTipFilter, TransparentToolButton, isDarkTheme, setFontFamilies, setTheme,
                                 setThemeColor, themeColor)
     from shiboken6 import isValid
     from qframelesswindow import FramelessWindow
@@ -2620,6 +2620,13 @@ TITLE_FAMILIES = ["Cascadia Mono", "Cascadia Code", "Consolas", "DejaVu Sans Mon
 # Font of the OS heading (“Windows 11 Pro”): Cascadia Mono, falling back to other monospaced fonts.
 MONO_FAMILIES = ["Cascadia Mono", "Cascadia Code", "Consolas", "JetBrains Mono", "Fira Code",
                  "DejaVu Sans Mono", "Menlo", "Liberation Mono", "Courier New"]
+if sys.platform == "darwin":
+    # Polices du Mac en tête : chaque famille absente placée avant oblige Qt à parcourir toutes les polices
+    # (plus de 400 ms au démarrage), et Segoe UI, Cascadia ou Consolas n'existent pas sous macOS.
+    # Mac fonts first: every missing family listed before makes Qt scan all fonts (over 400 ms at startup),
+    # and Segoe UI, Cascadia or Consolas don't exist on macOS.
+    UI_FAMILIES = [".AppleSystemUIFont", "Helvetica Neue"]
+    TITLE_FAMILIES = MONO_FAMILIES = ["Menlo", "Monaco", "Courier New"]
 
 
 def qfont(families, px, weight=QFont.Weight.Normal):
@@ -4257,6 +4264,8 @@ def main(argv=None):
         os.environ["QT_QPA_PLATFORM"] = "xcb;wayland"
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    if sys.platform == "darwin":
+        setFontFamilies(UI_FAMILIES)   # composants Fluent : « Segoe UI » par défaut / Fluent widgets: “Segoe UI” by default
     app.setApplicationName(APP_NAME)
     app.setFont(qfont(UI_FAMILIES, 14))
     lock = True if args.selftest else acquire_instance_lock()
