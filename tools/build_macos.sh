@@ -33,7 +33,8 @@ codesign --verify --deep --strict "$APP" && echo "✓ signature ad hoc valide / 
 echo "▶ Image disque / disk image"
 mkdir -p release
 rm -rf build/dmg && mkdir -p build/dmg
-cp -R "$APP" build/dmg/
+ditto "$APP" build/dmg/FastVer.app   # ditto garde tout ce que la signature couvre / keeps all the signature covers
+codesign --verify --deep --strict --verbose=2 build/dmg/FastVer.app
 ln -s /Applications build/dmg/Applications
 rm -f release/FastVer-macos-arm64.dmg
 hdiutil create -volname FastVer -srcfolder build/dmg -fs HFS+ -format UDZO -ov release/FastVer-macos-arm64.dmg

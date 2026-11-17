@@ -379,7 +379,7 @@ jobs:
           hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/fv" release/FastVer-macos-arm64.dmg
           ls -l "$RUNNER_TEMP/fv"
           "$RUNNER_TEMP/fv/FastVer.app/Contents/MacOS/FastVer" --version
-          codesign --verify --deep --strict "$RUNNER_TEMP/fv/FastVer.app"
+          codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/fv/FastVer.app"
           hdiutil detach "$RUNNER_TEMP/fv"
 
       - name: Capture d'écran / screenshot
