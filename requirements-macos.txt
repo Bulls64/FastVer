@@ -1,0 +1,7 @@
+# Dépendances propres à macOS : PySideSix-Frameless-Window y pilote la fenêtre avec PyObjC (Cocoa et Quartz).
+# Seuls les trois paquets utiles sont installés, pas le méta-paquet « pyobjc » (plus de 150 frameworks).
+# macOS-only dependencies: PySideSix-Frameless-Window drives the window there with PyObjC (Cocoa and Quartz).
+# Only the three packages needed are installed, not the “pyobjc” meta-package (over 150 frameworks).
+pyobjc-core==13.0
+pyobjc-framework-Cocoa==13.0
+pyobjc-framework-Quartz==13.0

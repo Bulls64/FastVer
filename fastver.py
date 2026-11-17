@@ -95,6 +95,16 @@ if os.name == "nt":
     import winreg
 else:
     import pwd
+if sys.platform == "darwin":
+    import plistlib   # fond d'écran de macOS 14 et plus / macOS 14+ wallpaper
+    import sqlite3    # fond d'écran de macOS 13 et avant / macOS 13 and earlier wallpaper
+    # Lancée depuis le Finder, une appli reçoit un PATH minimal (/usr/bin:/bin:/usr/sbin:/sbin) : les dossiers
+    # de Homebrew sont ajoutés à la fin, pour trouver fastfetch et brew (mise à jour de Fastfetch).
+    # Launched from the Finder, an app gets a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin): the Homebrew folders
+    # are appended, to find fastfetch and brew (Fastfetch update).
+    _path = (os.environ.get("PATH") or "/usr/bin:/bin:/usr/sbin:/sbin").split(os.pathsep)
+    os.environ["PATH"] = os.pathsep.join(_path + [d for d in ("/opt/homebrew/bin", "/opt/homebrew/sbin",
+                                                              "/usr/local/bin") if d not in _path])
 # Tous les modules de la bibliothèque standard sont chargés avant Qt (cf. Python 3.15, où le système d'import
 # de PySide6 casse certains imports différés) : aucun import ne doit avoir lieu dans une fonction appelée une fois
 # Qt chargé. Les modules réseau (urllib, ssl, hashlib…) sont chargés juste avant Qt pour la fenêtre, et à la
@@ -2603,8 +2613,8 @@ except Exception as _e:  # pragma: no cover — absent, DLL manquante, version i
     raise
 
 
-UI_FAMILIES = ["Segoe UI Variable Text", "Segoe UI", "SF Pro Text", "Inter", "Cantarell", "Ubuntu",
-               "Noto Sans", "DejaVu Sans"]
+UI_FAMILIES = ["Segoe UI Variable Text", "Segoe UI", "SF Pro Text", ".AppleSystemUIFont", "Inter", "Cantarell",
+               "Ubuntu", "Noto Sans", "DejaVu Sans"]
 TITLE_FAMILIES = ["Cascadia Mono", "Cascadia Code", "Consolas", "DejaVu Sans Mono", "Menlo", "Courier New"]
 # Police de l'intitulé de l'OS (« Windows 11 Pro ») : Cascadia Mono, avec repli sur d'autres polices à chasse fixe.
 # Font of the OS heading (“Windows 11 Pro”): Cascadia Mono, falling back to other monospaced fonts.
@@ -2632,9 +2642,7 @@ def wallpaper_path():
             cached = os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Themes\TranscodedWallpaper")
             return cached if os.path.isfile(cached) else None
         if sys.platform == "darwin":
-            out = command_output(["osascript", "-e", 'tell application "System Events" to get picture '
-                                  'of current desktop'], timeout=3)
-            return out if os.path.isfile(out) else None
+            return mac_wallpaper()
         # GNOME : image du thème en cours (sombre ou clair) d'abord.
         # GNOME: the current theme's image (dark or light) first.
         keys = ("picture-uri-dark", "picture-uri") if system_is_dark() else ("picture-uri", "picture-uri-dark")
@@ -2648,6 +2656,44 @@ def wallpaper_path():
     except Exception:
         pass
     return None
+
+
+def mac_wallpaper():
+    """Fond d'écran de macOS, lu dans ses réglages (sans AppleScript, qui demanderait une autorisation) :
+    Store/Index.plist depuis macOS 14, desktoppicture.db avant. None pour un fond dynamique sans fichier.
+    macOS wallpaper, read from its settings (without AppleScript, which would ask for a permission):
+    Store/Index.plist since macOS 14, desktoppicture.db before. None for a dynamic wallpaper without a file."""
+    support = os.path.expanduser("~/Library/Application Support")
+    try:
+        with open(os.path.join(support, "com.apple.wallpaper", "Store", "Index.plist"), "rb") as f:
+            store = plistlib.load(f)
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        store = None
+    if isinstance(store, dict):
+        def files(node):   # chaque « Files » : [{"relative": "file:///…"}] / every “Files”: [{"relative": …}]
+            if isinstance(node, dict):
+                for item in node.get("Files") or []:
+                    if isinstance(item, dict) and str(item.get("relative", "")).startswith("file://"):
+                        yield urllib.parse.unquote(str(item["relative"])[7:])
+                for v in node.values():
+                    yield from files(v)
+            elif isinstance(node, list):
+                for v in node:
+                    yield from files(v)
+        for key in ("AllSpacesAndDisplays", "Displays", "Spaces", "SystemDefault"):
+            path = next((p for p in files(store.get(key)) if os.path.isfile(p)), None)
+            if path:
+                return path
+        return None
+    try:
+        db = sqlite3.connect(f"file:{os.path.join(support, 'Dock', 'desktoppicture.db')}?mode=ro", uri=True)
+        try:
+            rows = [str(r[0]) for r in db.execute("SELECT value FROM data ORDER BY rowid DESC")]
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return None
+    return next((os.path.expanduser(r) for r in rows if os.path.isfile(os.path.expanduser(r))), None)
 
 
 def kde_wallpaper():
@@ -2749,7 +2795,9 @@ class AcrylicMaterial:
         path = wallpaper or wallpaper_path()
         img = self._load_reduced(path) if path else QImage()
         self.wallpaper = None if img.isNull() else img   # au quart de sa taille / at a quarter of its size
-        if self.wallpaper is None:
+        # Sous macOS, une capture du bureau demanderait l'autorisation d'enregistrer l'écran : fond uni à la place.
+        # On macOS, a desktop capture would ask for screen recording permission: solid background instead.
+        if self.wallpaper is None and sys.platform != "darwin":
             for scr in QGuiApplication.screens():  # avant l'affichage : FastVer n'est pas encore visible
                                                    # before showing: FastVer isn't visible yet
                 shot = scr.grabWindow(0).toImage()
