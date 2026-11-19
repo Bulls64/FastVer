@@ -376,6 +376,37 @@ jobs:
           tail -15 ~/Library/Logs/FastVer/fastver.log
           spctl -a -vv dist/FastVer.app 2>&1 || true   # ad hoc : refusé par Gatekeeper, attendu / rejected, expected
 
+      # Mac sans les certificats du Python de compilation (cas de tout Mac autre que le runner) : la connexion à
+      # GitHub doit marcher avec les certificats de macOS. La 1.4.5 publiée, qui ne les chargeait pas, sert de
+      # témoin : elle doit échouer ici, sinon le test ne reproduit pas le problème.
+      # Mac without the build Python's certificates (any Mac but the runner): the connection to GitHub must work
+      # with macOS's certificates. The published 1.4.5, which didn't load them, is the control: it must fail
+      # here, otherwise the test doesn't reproduce the problem.
+      - name: Certificats HTTPS / HTTPS certificates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r cafile capath < <(python -c "import ssl; p = ssl.get_default_verify_paths(); print(p.openssl_cafile, p.openssl_capath)")
+          echo "Certificats du Python de compilation / build Python certificates: $cafile $capath"
+          gh release download v1.4.5 -R "$GITHUB_REPOSITORY" -p FastVer-macos-arm64.dmg -D "$RUNNER_TEMP/old"
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/old/fv" "$RUNNER_TEMP/old/FastVer-macos-arm64.dmg"
+          sudo mv "$cafile" "$cafile.hidden" 2>/dev/null || true
+          sudo mv "$capath" "$capath.hidden" 2>/dev/null || true
+          set +e
+          env -u SSL_CERT_FILE -u SSL_CERT_DIR "$RUNNER_TEMP/old/fv/FastVer.app/Contents/MacOS/FastVer" --cli --check \
+            > "$RUNNER_TEMP/old.txt" 2>&1
+          env -u SSL_CERT_FILE -u SSL_CERT_DIR dist/FastVer.app/Contents/MacOS/FastVer --cli --check > "$RUNNER_TEMP/new.txt" 2>&1
+          new=$?
+          set -e
+          sudo mv "$cafile.hidden" "$cafile" 2>/dev/null || true
+          sudo mv "$capath.hidden" "$capath" 2>/dev/null || true
+          hdiutil detach "$RUNNER_TEMP/old/fv"
+          echo "--- 1.4.5 (témoin / control)"; cat "$RUNNER_TEMP/old.txt"
+          echo "--- cette version / this build"; cat "$RUNNER_TEMP/new.txt"
+          grep -q CERTIFICATE_VERIFY_FAILED "$RUNNER_TEMP/old.txt" || { echo "Le témoin n'échoue pas : test sans effet"; exit 1; }
+          ! grep -q "CERTIFICATE_VERIFY_FAILED" "$RUNNER_TEMP/new.txt"
+          [ "$new" -eq 0 ]
+
       - name: Image disque / disk image
         run: |
           hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/fv" release/FastVer-macos-arm64.dmg

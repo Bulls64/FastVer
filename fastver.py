@@ -117,11 +117,11 @@ if sys.platform == "darwin":
 
 def load_network():
     """Modules réseau et d'empreintes (mises à jour). / Network and checksum modules (updates)."""
-    global hashlib, hmac, urllib
+    global hashlib, hmac, ssl, urllib
     import hashlib
     import hmac
-    import http.client  # noqa: F401 — utilisés en interne par urllib / used internally by urllib
-    import ssl          # noqa: F401
+    import http.client  # noqa: F401 — utilisé en interne par urllib / used internally by urllib
+    import ssl
     import urllib.error
     import urllib.parse
     import urllib.request
@@ -1389,13 +1389,31 @@ def is_newer(a, b):
     return (pad(va), va[1]) > (pad(vb), vb[1])
 
 
+_SSL_CONTEXT = None
+
+
+def ssl_context():
+    """Contexte TLS des connexions à GitHub. Sous macOS, l'OpenSSL embarqué cherche ses certificats racine dans
+    le dossier de la machine de compilation, absent ailleurs : ceux de macOS (/etc/ssl/cert.pem) sont ajoutés.
+    TLS context for GitHub connections. On macOS, the bundled OpenSSL looks for its root certificates in the
+    build machine's folder, missing elsewhere: macOS's own (/etc/ssl/cert.pem) are added."""
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is None:
+        ctx = ssl.create_default_context()
+        if sys.platform == "darwin" and os.path.isfile("/etc/ssl/cert.pem"):
+            ctx.load_verify_locations(cafile="/etc/ssl/cert.pem")
+        _SSL_CONTEXT = ctx
+    return _SSL_CONTEXT
+
+
 def _open_url(url, accept, timeout, extra_headers=None):
     local_test = GITHUB_API.startswith("http://127.0.0.1") and url.startswith("http://127.0.0.1")
     if not (url.startswith("https://") or local_test):
         raise UpdateError(f"URL refusée : {url}")
     headers = {"Accept": accept, "User-Agent": f"{APP_NAME}/{APP_VERSION}"}
     headers.update(extra_headers or {})
-    return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout)
+    return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout,
+                                  context=ssl_context() if url.startswith("https://") else None)
 
 
 def _http_error(e, url):
