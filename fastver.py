@@ -127,15 +127,22 @@ def load_network():
     import urllib.request
 
 APP_NAME = "FastVer"
-APP_VERSION = "1.4.5"   # version publiée (comparée aux releases GitHub pour la mise à jour)
+APP_VERSION = "1.4.6"   # version publiée (comparée aux releases GitHub pour la mise à jour)
                         # published version (compared with GitHub releases for updates)
-BUILD = "2026-11-17-a"  # change à chaque correctif : permet de vérifier quelle version tourne
+BUILD = "2026-11-20-a"  # change à chaque correctif : permet de vérifier quelle version tourne
                         # changes with every fix: lets you check which version is running
 # Nouveautés affichées dans la fenêtre « Nouveautés de la v… » (la plus récente en premier).
 # Ajouter une entrée à chaque nouvelle version ; seule celle d'APP_VERSION est montrée.
 # What's new, shown in the “What's new in v…” window (most recent first).
 # Add an entry with every new version; only the APP_VERSION one is shown.
 CHANGELOG = {
+    "1.4.6": {
+        "fr": ["macOS : correction de l'erreur CERTIFICATE_VERIFY_FAILED. FastVer ne pouvait pas joindre GitHub sur "
+               "un Mac (vérification des mises à jour de FastVer et de Fastfetch) : il utilise maintenant les "
+               "certificats de macOS."],
+        "en": ["macOS: fixed the CERTIFICATE_VERIFY_FAILED error. FastVer couldn't reach GitHub on a Mac "
+               "(update checks for FastVer and Fastfetch): it now uses macOS's certificates."],
+    },
     "1.4.5": {
         "fr": ["macOS : nouvelle version pour les Mac Apple Silicon (FastVer-macos-arm64.dmg, macOS 14 ou plus), "
                "avec Fastfetch installé par Homebrew (brew install fastfetch).",
