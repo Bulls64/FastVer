@@ -405,7 +405,11 @@ jobs:
           echo "--- cette version / this build"; cat "$RUNNER_TEMP/new.txt"
           grep -q CERTIFICATE_VERIFY_FAILED "$RUNNER_TEMP/old.txt" || { echo "Le témoin n'échoue pas : test sans effet"; exit 1; }
           ! grep -q "CERTIFICATE_VERIFY_FAILED" "$RUNNER_TEMP/new.txt"
-          [ "$new" -eq 0 ]
+          # Une réponse de GitHub prouve que la connexion TLS a abouti, y compris « limite de requêtes atteinte »
+          # (60 requêtes par heure sans compte, adresses IP partagées entre runners).
+          # Any answer from GitHub proves the TLS connection succeeded, including “request limit reached”
+          # (60 requests per hour without an account, IP addresses shared between runners).
+          [ "$new" -eq 0 ] || grep -q "request limit" "$RUNNER_TEMP/new.txt"
 
       - name: Image disque / disk image
         run: |
